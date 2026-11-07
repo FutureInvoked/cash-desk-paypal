@@ -218,3 +218,32 @@ def test_dotenv_loader(tmp_path, monkeypatch):
     assert os.environ["PAYPAL_CLIENT_ID"] == "abc" and os.environ["PAYPAL_CLIENT_SECRET"] == "xyz"
     assert os.environ["EXISTING"] == "fromenv"  # real environment wins
     assert loaded == ["PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET"]  # names only, never values
+
+
+def test_list_hydrates_paid_invoices_because_the_list_endpoint_omits_payment_details():
+    # Real sandbox finding (2026-11-07): GET /v2/invoicing/invoices returns payments.paid_amount but
+    # no payments.transactions, even with fields=all. The full invoice comes from GET .../{id}.
+    import copy
+    full = {i["id"]: i for i in FIX_INV["items"]}
+    listed = copy.deepcopy(FIX_INV["items"])
+    for i in listed:
+        if "payments" in i:
+            i["payments"] = {"paid_amount": i["payments"]["paid_amount"]}
+    seen = []
+
+    def handler(req):
+        p = req.url.path
+        if p == "/v1/oauth2/token":
+            return httpx.Response(200, json={"access_token": "T", "expires_in": 3600, "scope": SCOPE})
+        if p == "/v2/invoicing/invoices":
+            return httpx.Response(200, json={"items": listed, "total_pages": 1})
+        if p.startswith("/v2/invoicing/invoices/"):
+            seen.append(p.rsplit("/", 1)[-1])
+            return httpx.Response(200, json=full[p.rsplit("/", 1)[-1]])
+        return httpx.Response(404)
+
+    c = SandboxPayPalClient("CID", "S", transport=httpx.MockTransport(handler), sleep=lambda s: None)
+    invs = {i.number: i for i in c.list_invoices()}
+    assert invs["NW-1001"].payment_ids  # hydrated from the detail endpoint
+    assert len(seen) == sum(1 for i in FIX_INV["items"] if "payments" in i)  # only paid invoices fetched
+    assert "NW-1016" not in [full[x]["detail"]["invoice_number"] for x in seen]  # unpaid ones are not

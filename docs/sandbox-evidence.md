@@ -28,6 +28,14 @@ and request ids include a hash of the payer, so PayPal's idempotency doesn't ret
 Live set: 0005, 0006, 0008 go to fictional customers and stay unpaid or are paid from another
 address; 0011-0017 go to the buyer.
 
+## First real payments (2026-11-07 ~10:20)
+
+The owner paid invoices 0011 and 0012 from the sandbox buyer account. Real-API finding:
+`GET /v2/invoicing/invoices` (even with `fields=all`) returns `payments.paid_amount` but not
+`payments.transactions`. So the client now fetches `GET /v2/invoicing/invoices/{id}` for any invoice
+with money on it. After that fix the desk shows 2 transactions, both **matched** by invoice reference
+(0011: 125.00 USD, 0012: 86.00 USD). They came from Invoicing while Transaction Search lags.
+
 ## S3 gated actions
 
 Pending. This needs the owner's sandbox payments (see `docs/sandbox-pay-steps.md`, which is generated

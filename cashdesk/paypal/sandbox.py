@@ -110,10 +110,19 @@ class SandboxPayPalClient(PayPalClient):
             r = self._call("GET", "/v2/invoicing/invoices",
                            params={"page": page, "page_size": 100, "total_required": "true", "fields": "all"})
             b = r.json()
-            out += [parse_invoice(d) for d in b.get("items", [])]
+            out += [parse_invoice(self._hydrate(d)) for d in b.get("items", [])]
             if page >= int(b.get("total_pages") or 1) or not b.get("items"):
                 return out
             page += 1
+
+    def _hydrate(self, d: dict) -> dict:
+        """The list endpoint returns payments.paid_amount without payments.transactions (seen on the
+        sandbox 2026-11-07, even with fields=all). Fetch the full invoice when there is money on it."""
+        for key in ("payments", "refunds"):
+            block = d.get(key) or {}
+            if block and not block.get("transactions"):
+                return self._call("GET", f"/v2/invoicing/invoices/{d['id']}").json()
+        return d
 
     def search_transactions(self, start: datetime, end: datetime, *, merge_invoice_payments: bool = True
                             ) -> list[Transaction]:
