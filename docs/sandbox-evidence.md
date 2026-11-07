@@ -36,6 +36,19 @@ The owner paid invoices 0011 and 0012 from the sandbox buyer account. Real-API f
 with money on it. After that fix the desk shows 2 transactions, both **matched** by invoice reference
 (0011: 125.00 USD, 0012: 86.00 USD). They came from Invoicing while Transaction Search lags.
 
+## S4 parity: invoices (2026-11-07)
+
+Two real invoices are recorded in `fixtures/sandbox-recorded/`: 0011 (paid) and 0005 (unpaid).
+Names and emails were scrubbed, and phones and addresses removed. `tests/test_parity.py` asserts
+that every invoice field the parser and matcher read is present in the real responses, and that real
+and fixture invoices parse the same way. Findings:
+- The real API returns many fields beyond the published schema, for example `detail.archived`,
+  `payments.transactions[].transaction_type`, and top-level `settings` and `unilateral`. The parser
+  ignores unknown fields.
+- The list endpoint's `detail.metadata` has only `create_time`, with no `last_sent_time`. "Last sent"
+  is optional throughout.
+- Transaction-side parity waits for Transaction Search to report the owner's payments.
+
 ## S3 gated actions
 
 Pending. This needs the owner's sandbox payments (see `docs/sandbox-pay-steps.md`, which is generated

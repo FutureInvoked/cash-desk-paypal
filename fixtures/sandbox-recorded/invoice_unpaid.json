@@ -1,0 +1,71 @@
+{
+  "amount": {
+    "currency_code": "USD",
+    "value": "240.00"
+  },
+  "detail": {
+    "currency_code": "USD",
+    "group_draft": false,
+    "invoice_date": "2026-11-07",
+    "invoice_number": "0005",
+    "metadata": {
+      "create_time": "2026-11-07T08:49:10Z"
+    },
+    "note": "Thank you, Redwood Legal. [cashdesk-seed S05]",
+    "payment_term": {
+      "due_date": "2026-11-07"
+    },
+    "viewed_by_recipient": false
+  },
+  "due_amount": {
+    "currency_code": "USD",
+    "value": "240.00"
+  },
+  "id": "INV2-FQBD-KUDF-YRSW-8GWA",
+  "links": [
+    {
+      "href": "https://api.sandbox.paypal.com/v2/invoicing/invoices/INV2-FQBD-KUDF-YRSW-8GWA",
+      "method": "GET",
+      "rel": "self"
+    },
+    {
+      "href": "https://api.sandbox.paypal.com/v2/invoicing/invoices/INV2-FQBD-KUDF-YRSW-8GWA",
+      "method": "PUT",
+      "rel": "replace"
+    },
+    {
+      "href": "https://api.sandbox.paypal.com/v2/invoicing/invoices/INV2-FQBD-KUDF-YRSW-8GWA/cancel",
+      "method": "POST",
+      "rel": "cancel"
+    },
+    {
+      "href": "https://api.sandbox.paypal.com/v2/invoicing/invoices/INV2-FQBD-KUDF-YRSW-8GWA/remind",
+      "method": "POST",
+      "rel": "remind"
+    },
+    {
+      "href": "https://api.sandbox.paypal.com/v2/invoicing/invoices/INV2-FQBD-KUDF-YRSW-8GWA/payments",
+      "method": "POST",
+      "rel": "record-payment"
+    },
+    {
+      "href": "https://api.sandbox.paypal.com/v2/invoicing/invoices/INV2-FQBD-KUDF-YRSW-8GWA/generate-qr-code",
+      "method": "GET",
+      "rel": "qr-code"
+    }
+  ],
+  "primary_recipients": [
+    {
+      "billing_info": {
+        "email_address": "finance@redwood-legal.example.com",
+        "name": {
+          "full_name": "Pat Buyer",
+          "given_name": "Pat",
+          "surname": "Buyer"
+        }
+      }
+    }
+  ],
+  "status": "SENT",
+  "unilateral": false
+}

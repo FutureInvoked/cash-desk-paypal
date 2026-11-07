@@ -1,0 +1,122 @@
+{
+  "amount": {
+    "breakdown": {
+      "discount": {
+        "invoice_discount": {
+          "amount": {
+            "currency_code": "USD",
+            "value": "0.00"
+          }
+        },
+        "item_discount": {
+          "currency_code": "USD",
+          "value": "0.00"
+        }
+      },
+      "item_total": {
+        "currency_code": "USD",
+        "value": "125.00"
+      },
+      "tax_total": {
+        "currency_code": "USD",
+        "value": "0.00"
+      }
+    },
+    "currency_code": "USD",
+    "value": "125.00"
+  },
+  "configuration": {
+    "allow_only_pay_by_bank": false,
+    "allow_tip": false,
+    "allow_vba_payments": false,
+    "save_item_for_future": true,
+    "tax_calculated_after_discount": false,
+    "tax_inclusive": false,
+    "template_id": "TEMP-1WH52328EB569261S"
+  },
+  "detail": {
+    "archived": false,
+    "category_code": "SHIPPABLE",
+    "currency_code": "USD",
+    "group_draft": false,
+    "invoice_date": "2026-11-07",
+    "invoice_number": "0011",
+    "metadata": {
+      "caller_type": "API_V2_INVOICE",
+      "create_time": "2026-11-07T09:11:52Z",
+      "created_by_flow": "REGULAR_SINGLE",
+      "first_sent_time": "2026-11-07T09:11:53Z",
+      "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-R22F-Y42E-SN77-EVEH",
+      "last_sent_time": "2026-11-07T09:11:53Z",
+      "last_update_time": "2026-11-07T09:15:15Z",
+      "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#R22FY42ESN77EVEH",
+      "spam_info": {}
+    },
+    "note": "Thank you, Harbor Lane Coffee. [cashdesk-seed S01]",
+    "payment_term": {
+      "due_date": "2026-11-07",
+      "term_type": "DUE_ON_RECEIPT"
+    },
+    "viewed_by_recipient": false
+  },
+  "due_amount": {
+    "currency_code": "USD",
+    "value": "0.00"
+  },
+  "id": "INV2-R22F-Y42E-SN77-EVEH",
+  "invoicer": {},
+  "items": [
+    {
+      "id": "ITEM-9GE43625K5060021B",
+      "name": "Menu board redesign",
+      "quantity": "1",
+      "unit_amount": {
+        "currency_code": "USD",
+        "value": "125.00"
+      }
+    }
+  ],
+  "links": [
+    {
+      "href": "https://api.sandbox.paypal.com/v2/invoicing/invoices/INV2-R22F-Y42E-SN77-EVEH",
+      "method": "GET",
+      "rel": "self"
+    }
+  ],
+  "payments": {
+    "paid_amount": {
+      "currency_code": "USD",
+      "value": "125.00"
+    },
+    "transactions": [
+      {
+        "amount": {
+          "currency_code": "USD",
+          "value": "125.00"
+        },
+        "method": "PAYPAL",
+        "payment_date": "2026-11-07",
+        "payment_date_time": "2026-11-07T01:15:15Z",
+        "payment_id": "3WY06483B5792335X",
+        "transaction_status": "SUCCESS",
+        "transaction_type": "SALE",
+        "type": "PAYPAL"
+      }
+    ]
+  },
+  "primary_recipients": [
+    {
+      "billing_info": {
+        "email_address": "buyer@personal.example.com",
+        "name": {
+          "full_name": "Pat Buyer",
+          "given_name": "Pat",
+          "surname": "Buyer"
+        }
+      }
+    }
+  ],
+  "settings": {},
+  "status": "PAID",
+  "unilateral": false
+}
