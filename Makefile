@@ -21,7 +21,7 @@ demo: install
 	$(BIN)/python -m uvicorn cashdesk.app:app --host 127.0.0.1 --port 8000
 
 audit-verify: install
-	@echo "audit-verify: not implemented yet (backlog E6)"; exit 1
+	$(BIN)/python -m cashdesk.audit verify
 
 clean:
 	rm -rf $(VENV) var/*.db var/*.jsonl
