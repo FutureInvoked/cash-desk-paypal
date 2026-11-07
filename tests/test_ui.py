@@ -48,3 +48,27 @@ def test_reconciliation_grid_columns_and_features():
 def test_page_is_served_with_a_title():
     r = TestClient(create_app(desk=object())).get("/")
     assert r.status_code == 200 and "<title>Cash Desk for PayPal</title>" in r.text
+
+
+def test_approvals_tab_contract():
+    assert 'id="approvals-grid"' in HTML and 'id="propose"' in HTML
+    assert "/api/approvals" in HTML and "/api/proposals/refresh" in HTML
+    # approve/reject/execute endpoints are all wired
+    for path in ("/approve", "/reject", "/execute"):
+        assert path in HTML, path
+    # the confirm dialog shows the exact sandbox call before anything runs
+    assert '<dialog id="confirm"' in HTML
+    assert "https://api-m.sandbox.paypal.com" in HTML
+    assert "PayPal-Request-Id" in HTML and "cashdesk-" in HTML
+    # errors from the policy are surfaced
+    assert "violations" in HTML
+
+
+def test_approve_only_runs_after_explicit_confirmation():
+    # the approve endpoint is only called from the dialog's confirm handler
+    i = HTML.index('id="confirm-run"')
+    assert HTML.count("/approve`") == 1
+    handler = HTML[HTML.index("async function confirmAndRun"):]
+    handler = handler[:handler.index("\n}\n")]
+    assert "/approve`" in handler and "/execute`" in handler
+    assert i > 0

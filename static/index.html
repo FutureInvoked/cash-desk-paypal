@@ -60,7 +60,7 @@
   .tone-bad { color: var(--bad); background: var(--bad-bg); }
   .tone-info { color: var(--info); background: var(--info-bg); }
   .tone-neutral { color: var(--neutral); background: var(--neutral-bg); }
-  #grid .ag-cell-wrap-text { line-height: 1.4; padding-top: 8px; padding-bottom: 8px; word-break: normal; }
+  #grid .ag-cell-wrap-text, #approvals-grid .ag-cell-wrap-text { line-height: 1.4; padding-top: 8px; padding-bottom: 8px; word-break: normal; }
   #grid .ag-cell .sub { line-height: 1.3; }
   .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   .sub { color: var(--muted); font-size: 12px; }
@@ -71,6 +71,26 @@
   .row-attention { box-shadow: inset 3px 0 0 var(--warn); }
   .state { padding: 40px; text-align: center; color: var(--muted); }
   .panel { display: none; } .panel.active { display: block; }
+  #approvals-grid { height: calc(100vh - 190px); min-height: 380px; }
+  .row-actions { display: flex; gap: 6px; align-items: center; height: 100%; }
+  .row-actions button { padding: 3px 10px; font-size: 12px; }
+  button.danger { color: var(--bad); }
+  dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text);
+           width: min(720px, calc(100vw - 32px)); padding: 18px 20px; }
+  dialog::backdrop { background: rgb(0 0 0 / .45); }
+  dialog h2 { font-size: 16px; margin: 0 0 6px; }
+  .call { border: 1px solid var(--border); border-radius: 8px; margin: 10px 0; overflow: hidden; }
+  .call-head { display: flex; gap: 8px; align-items: center; padding: 8px 10px; background: var(--surface-2);
+               font-family: var(--mono); font-size: 12px; word-break: break-all; }
+  .method { font-weight: 700; color: var(--accent); }
+  .call pre { margin: 0; padding: 8px 10px; font: 12px/1.4 var(--mono); max-height: 220px; overflow: auto; white-space: pre-wrap; }
+  .call .hdr { padding: 0 10px 8px; font: 12px var(--mono); color: var(--muted); }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .field input { font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+                 background: var(--bg); color: var(--text); }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .error { color: var(--bad); min-height: 1em; margin: 8px 0 0; }
+  .violations { margin: 6px 0 0; padding-left: 18px; color: var(--bad); font-size: 12px; }
   @media (max-width: 900px) { .layout.open { grid-template-columns: minmax(0,1fr); } aside#detail { height: auto; } }
 </style>
 </head>
@@ -103,7 +123,28 @@
       <aside id="detail" aria-live="polite"></aside>
     </div>
   </section>
-  <section class="panel" id="panel-approvals"><div class="state">Approvals arrive in the next build step.</div></section>
+  <section class="panel" id="panel-approvals">
+    <div class="toolbar">
+      <button class="primary" id="propose">Propose actions</button>
+      <span class="sub" id="approvals-note">The agent proposes; nothing runs until you approve it. Every action is policy-checked twice.</span>
+    </div>
+    <div id="approvals-grid" role="region" aria-label="Approval queue"></div>
+  </section>
+  <dialog id="confirm" aria-labelledby="confirm-title">
+    <form method="dialog" id="confirm-form">
+      <h2 id="confirm-title">Approve and run</h2>
+      <p id="confirm-why" class="sub"></p>
+      <div id="confirm-calls"></div>
+      <div id="confirm-policy"></div>
+      <label class="field" id="confirm-note-wrap">Note (optional)<input id="confirm-note" maxlength="500"></label>
+      <label class="field">Approved by<input id="confirm-by" value="owner" required maxlength="80"></label>
+      <p id="confirm-error" class="error" role="alert"></p>
+      <div class="actions">
+        <button type="button" id="confirm-cancel">Cancel</button>
+        <button type="button" class="primary" id="confirm-run">Approve and run</button>
+      </div>
+    </form>
+  </dialog>
   <section class="panel" id="panel-audit"><div class="state">The audit log arrives in the next build step.</div></section>
 </main>
 <script>
@@ -291,7 +332,149 @@ function setLoading(on) {
   if (on && gridApi) gridApi.setGridOption("loading", true); else if (gridApi) gridApi.setGridOption("loading", false);
 }
 
+// ---------- approvals ----------
+const SANDBOX = "https://api-m.sandbox.paypal.com";
+const QSTATUS = {
+  pending: { label: "Waiting for you", tone: "info" }, approved: { label: "Approved", tone: "info" },
+  executing: { label: "Running", tone: "neutral" }, executed: { label: "Done", tone: "ok" },
+  failed: { label: "Failed (retry)", tone: "bad" }, rejected: { label: "Rejected", tone: "neutral" },
+  blocked: { label: "Blocked by policy", tone: "bad" }, expired: { label: "Expired", tone: "neutral" },
+};
+const ACTION = { send_reminder: "Send reminder", create_draft_invoice: "Create + send invoice",
+  record_payment: "Record payment", refund_capture: "Refund duplicate" };
+const qpill = st => { const s = QSTATUS[st] || { label: st, tone: "neutral" }; return `<span class="pill tone-${s.tone}">${esc(s.label)}</span>`; };
+let approvalsApi = null, approvals = [], current = null;
+
+function ActionsRenderer() {}
+ActionsRenderer.prototype.init = function (p) {
+  const it = p.data;
+  this.e = document.createElement("div");
+  this.e.className = "row-actions";
+  if (it.status === "pending") {
+    this.e.innerHTML = `<button class="primary" data-act="approve">Approve…</button><button class="danger" data-act="reject">Reject…</button>`;
+  } else if (it.status === "approved" || it.status === "failed") {
+    this.e.innerHTML = `<button class="primary" data-act="retry">${it.status === "failed" ? "Retry" : "Run"}…</button>`;
+  } else {
+    this.e.innerHTML = `<span class="sub">${esc(it.decided_by ? "by " + it.decided_by : "")}</span>`;
+  }
+  this.e.querySelectorAll("button").forEach(b => b.onclick = () => openConfirm(it, b.dataset.act));
+};
+ActionsRenderer.prototype.getGui = function () { return this.e; };
+ActionsRenderer.prototype.refresh = function () { return false; };
+
+const approvalCols = [
+  { field: "status", headerName: "Status", width: 170, cellRenderer: p => qpill(p.value) },
+  { headerName: "Action", width: 180, valueGetter: p => ACTION[p.data.proposal.type] || p.data.proposal.type },
+  { headerName: "Invoice / target", width: 170, cellClass: "num",
+    valueGetter: p => p.data.proposal.invoice_number || p.data.proposal.target },
+  { headerName: "Amount", width: 130, type: "rightAligned", cellClass: "num",
+    valueGetter: p => { const a = p.data.proposal.amount; return a ? money({ value: a.value, currency: a.currency_code }) : ""; } },
+  { headerName: "Why", flex: 1, minWidth: 300, wrapText: true, autoHeight: true,
+    valueGetter: p => p.data.proposal.reason,
+    cellRenderer: p => `${esc(p.value)}${p.data.proposal.needs_review ? ' <span class="pill tone-warn">needs review</span>' : ""}` },
+  { headerName: "Policy", width: 220, wrapText: true, autoHeight: true,
+    cellRenderer: p => p.data.policy.allowed ? '<span class="pill tone-ok">passes</span>'
+      : (p.data.policy.violations || []).map(v => `<div class="sub" style="color:var(--bad)">${esc(v.message)}</div>`).join("") },
+  { headerName: "", width: 190, cellRenderer: ActionsRenderer, sortable: false, filter: false },
+];
+
+function callsFor(it) {
+  const rid = `cashdesk-${it.id}`, calls = it.proposal.api_calls;
+  return calls.map((c, n) => ({ ...c, rid: calls.length > 1 ? `${rid}-${n === 0 ? "create" : "send"}` : rid }));
+}
+
+function openConfirm(it, act) {
+  current = { it, act };
+  const reject = act === "reject";
+  document.getElementById("confirm-title").textContent = reject ? "Reject this action" :
+    `${ACTION[it.proposal.type] || it.proposal.type}: approve and run`;
+  document.getElementById("confirm-why").textContent = it.proposal.reason;
+  document.getElementById("confirm-calls").innerHTML = (reject ? "<p>Nothing will be sent to PayPal.</p>" :
+    "<p><strong>Exactly these calls will run against the PayPal sandbox:</strong></p>") + (reject ? "" : callsFor(it).map(c => `
+      <div class="call"><div class="call-head"><span class="method">${esc(c.method)}</span><span>${esc(SANDBOX + c.path)}</span></div>
+      <div class="hdr">PayPal-Request-Id: ${esc(c.rid)}</div>
+      <pre>${esc(JSON.stringify(c.body, null, 2))}</pre></div>`).join(""));
+  const v = it.policy.violations || [];
+  document.getElementById("confirm-policy").innerHTML = it.policy.allowed
+    ? '<p class="sub">Policy check: <span class="pill tone-ok">passes</span> (checked again right before the call)</p>'
+    : `<p class="sub">Policy check failed:</p><ul class="violations">${v.map(x => `<li>${esc(x.message)}</li>`).join("")}</ul>`;
+  document.getElementById("confirm-note-wrap").style.display = reject ? "" : "none";
+  document.getElementById("confirm-note").value = "";
+  document.getElementById("confirm-error").textContent = "";
+  const run = document.getElementById("confirm-run");
+  run.textContent = reject ? "Reject" : (act === "retry" ? "Run now" : "Approve and run");
+  run.className = reject ? "danger" : "primary";
+  run.disabled = false;
+  document.getElementById("confirm").showModal();
+}
+
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const d = j.detail;
+    const msg = d && d.violations ? d.violations.map(v => v.message).join("; ") : (typeof d === "string" ? d : `HTTP ${r.status}`);
+    throw new Error(msg);
+  }
+  return j;
+}
+
+async function confirmAndRun() {
+  const { it, act } = current, by = document.getElementById("confirm-by").value.trim();
+  const err = document.getElementById("confirm-error"), run = document.getElementById("confirm-run");
+  if (!by) { err.textContent = "Enter who is approving."; return; }
+  run.disabled = true; err.textContent = "";
+  try {
+    if (act === "reject") {
+      await post(`/api/approvals/${it.id}/reject`, { by, note: document.getElementById("confirm-note").value || null });
+    } else {
+      if (act === "approve") await post(`/api/approvals/${it.id}/approve`, { by });
+      await post(`/api/approvals/${it.id}/execute`);
+    }
+    document.getElementById("confirm").close();
+  } catch (e) {
+    err.textContent = e.message; run.disabled = false;
+  }
+  await loadApprovals();
+}
+
+async function loadApprovals() {
+  try {
+    const r = await fetch("/api/approvals");
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    approvals = (await r.json()).items.slice().reverse();
+    approvalsApi.setGridOption("rowData", approvals);
+    approvalsApi.redrawRows();  // re-apply status row classes for updated items
+    requestAnimationFrame(() => approvalsApi.resetRowHeights());
+    const pending = approvals.filter(i => i.status === "pending").length;
+    document.querySelector('nav.tabs button[data-tab="approvals"]').textContent = pending ? `Approvals (${pending})` : "Approvals";
+  } catch (e) {
+    approvalsApi.setGridOption("overlayNoRowsTemplate", `<span class="state">Could not load approvals (${esc(e.message)}).</span>`);
+    approvalsApi.setGridOption("rowData", []);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  approvalsApi = agGrid.createGrid(document.getElementById("approvals-grid"), {
+    columnDefs: approvalCols, rowData: [], getRowId: p => p.data.id,
+    defaultColDef: { sortable: true, resizable: true, suppressHeaderMenuButton: true },
+    getRowClass: p => ({ failed: "row-exception", blocked: "row-exception", pending: "row-attention" }[p.data.status] || ""),
+    overlayNoRowsTemplate: '<span class="state">No proposed actions yet. Press “Propose actions” to let the agent suggest what to do.</span>',
+    onGridSizeChanged: e => e.api.resetRowHeights(),
+    theme: gridOptions.theme,
+  });
+  document.getElementById("propose").onclick = async () => {
+    const b = document.getElementById("propose"); b.disabled = true;
+    try { const r = await post("/api/proposals/refresh");
+      document.getElementById("approvals-note").textContent = `${r.enqueued} new proposal(s); ${r.skipped} already in the queue.`;
+    } catch (e) { document.getElementById("approvals-note").textContent = "Could not propose: " + e.message; }
+    b.disabled = false; await loadApprovals();
+  };
+  document.getElementById("confirm-run").onclick = confirmAndRun;
+  document.getElementById("confirm-cancel").onclick = () => document.getElementById("confirm").close();
+  loadApprovals();
+
   gridApi = agGrid.createGrid(document.getElementById("grid"), gridOptions);
   document.getElementById("search").addEventListener("input", e => { gridApi.setGridOption("quickFilterText", e.target.value); gridApi.onFilterChanged(); });
   document.getElementById("exceptions-only").addEventListener("change", () => gridApi.onFilterChanged());
@@ -299,6 +482,8 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
     document.querySelectorAll("nav.tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
     document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + b.dataset.tab));
+    // grids measure auto-height rows only while visible
+    requestAnimationFrame(() => { gridApi.resetRowHeights(); approvalsApi.resetRowHeights(); });
   });
   load();
 });
