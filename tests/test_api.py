@@ -44,6 +44,7 @@ def test_reconciliation_returns_results_reasons_and_summary(api):
     assert t["payer_email"] == "leo@brightside.example.com" and t["date"] == "2026-10-29"
     s = body["summary"]
     assert s["transactions"] == 26 and 0 < s["matched_pct"] <= 100
+    assert s["payments"] == 24 and s["matched"] == 15 and s["matched_pct"] == 62.5
     assert s["unreconciled"]["USD"] and s["outstanding"]["USD"]
     assert s["pending_actions"] == 0
 

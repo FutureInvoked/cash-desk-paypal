@@ -119,7 +119,7 @@ class Desk:
             if x.outcome in OUTSTANDING:
                 outstanding[x.outstanding.currency] = outstanding.get(x.outstanding.currency, Decimal("0")) + x.outstanding.amount
         s = r.summary()
-        return {**s, "matched_pct": round(100 * len(matched) / len(payments), 1) if payments else 0.0,
+        return {**s, "payments": len(payments), "matched": len(matched), "matched_pct": round(100 * len(matched) / len(payments), 1) if payments else 0.0,
                 "unreconciled": {k: f"{v:.2f}" for k, v in sorted(unrec.items())},
                 "outstanding": {k: f"{v:.2f}" for k, v in sorted(outstanding.items())},
                 "pending_actions": len(self.queue.list(status="pending"))}

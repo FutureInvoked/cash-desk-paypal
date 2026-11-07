@@ -46,9 +46,9 @@
   .chip[aria-pressed="true"] { outline: 2px solid var(--accent); }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) 0; gap: 0; }
   .layout.open { grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; }
-  #grid { height: calc(100vh - 230px); min-height: 420px; }
+  #grid { height: calc(100vh - 330px); min-height: 420px; }
   aside#detail { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px;
-                 overflow: auto; height: calc(100vh - 230px); min-height: 420px; display: none; }
+                 overflow: auto; height: calc(100vh - 330px); min-height: 420px; display: none; }
   .layout.open aside#detail { display: block; }
   aside h2 { font-size: 15px; margin: 0 0 6px; }
   aside dl { margin: 10px 0; font-size: 12px; }
@@ -71,7 +71,7 @@
   .row-attention { box-shadow: inset 3px 0 0 var(--warn); }
   .state { padding: 40px; text-align: center; color: var(--muted); }
   .panel { display: none; } .panel.active { display: block; }
-  #approvals-grid { height: calc(100vh - 190px); min-height: 380px; }
+  #approvals-grid { height: calc(100vh - 290px); min-height: 380px; }
   .row-actions { display: flex; gap: 6px; align-items: center; height: 100%; }
   .row-actions button { padding: 3px 10px; font-size: 12px; }
   button.danger { color: var(--bad); }
@@ -91,6 +91,18 @@
   .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
   .error { color: var(--bad); min-height: 1em; margin: 8px 0 0; }
   .violations { margin: 6px 0 0; padding-left: 18px; color: var(--bad); font-size: 12px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 14px 20px;
+          background: var(--surface); border-bottom: 1px solid var(--border); }
+  .kpi { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg); }
+  .kpi-label { font-size: 12px; color: var(--muted); }
+  .kpi-value { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .kpi-sub { font-size: 12px; color: var(--muted); }
+  .chain { padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; font-weight: 600; }
+  .chain.ok { color: var(--ok); background: var(--ok-bg); }
+  .chain.bad { color: var(--bad); background: var(--bad-bg); }
+  .head-row code { font: 12px var(--mono); background: var(--surface-2); padding: 4px 8px; border-radius: 6px; word-break: break-all; }
+  #audit-grid { height: calc(100vh - 330px); min-height: 360px; }
+  @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 900px) { .layout.open { grid-template-columns: minmax(0,1fr); } aside#detail { height: auto; } }
 </style>
 </head>
@@ -106,6 +118,12 @@
   </div>
   <button class="primary" id="sync">Re-sync PayPal</button>
 </header>
+<section class="kpis" aria-label="Summary">
+  <div class="kpi"><div class="kpi-label">Payments matched</div><div class="kpi-value" id="kpi-matched">…</div><div class="kpi-sub" id="kpi-matched-sub"></div></div>
+  <div class="kpi"><div class="kpi-label">Unreconciled payments</div><div class="kpi-value" id="kpi-unreconciled">…</div><div class="kpi-sub">unmatched, duplicate or wrong currency</div></div>
+  <div class="kpi"><div class="kpi-label">Still owed on invoices</div><div class="kpi-value" id="kpi-outstanding">…</div><div class="kpi-sub" id="kpi-outstanding-sub"></div></div>
+  <div class="kpi"><div class="kpi-label">Actions waiting for you</div><div class="kpi-value" id="kpi-pending">…</div><div class="kpi-sub">nothing runs without approval</div></div>
+</section>
 <nav class="tabs" role="tablist">
   <button role="tab" aria-selected="true" data-tab="recon">Reconciliation</button>
   <button role="tab" aria-selected="false" data-tab="approvals">Approvals</button>
@@ -145,7 +163,15 @@
       </div>
     </form>
   </dialog>
-  <section class="panel" id="panel-audit"><div class="state">The audit log arrives in the next build step.</div></section>
+  <section class="panel" id="panel-audit">
+    <div class="chain" id="chain-status" role="status">Checking the audit chain…</div>
+    <div class="toolbar head-row">
+      <span class="sub">Head hash (copy it somewhere else to anchor the log):</span>
+      <code id="head-hash">-</code>
+      <button id="copy-head">Copy</button>
+    </div>
+    <div id="audit-grid" role="region" aria-label="Audit log"></div>
+  </section>
 </main>
 <script>
 "use strict";
@@ -297,8 +323,6 @@ const gridOptions = {
     return !collapsed.has(st) || !!document.getElementById("search").value;
   },
   rowSelection: { mode: "singleRow", checkboxes: false, enableClickSelection: true },
-  onFilterChanged: e => e.api.resetRowHeights(),
-  onGridSizeChanged: e => e.api.resetRowHeights(),
   onRowClicked: e => { if (e.data.kind === "group") return; e.node.setSelected(true); showDetail(e.data); },
   overlayNoRowsTemplate: '<span class="state">No rows match these filters.</span>',
   theme: agGrid.themeQuartz.withParams({
@@ -317,6 +341,7 @@ async function load() {
     document.getElementById("mode").textContent = `mode: ${data.mode}`;
     document.getElementById("asof").textContent = `as of ${data.as_of}`;
     document.getElementById("ai").textContent = `AI: ${data.ai_status}`;
+    renderSummary(data.summary);
     const rows = rowsFrom(data);
     renderChips(rows);
     gridApi.setGridOption("rowData", groupedRows(rows));
@@ -330,6 +355,56 @@ async function load() {
 function setLoading(on) {
   document.getElementById("sync").disabled = on;
   if (on && gridApi) gridApi.setGridOption("loading", true); else if (gridApi) gridApi.setGridOption("loading", false);
+}
+
+// ---------- summary ----------
+const perCcy = o => Object.entries(o || {}).map(([c, v]) => money({ value: v, currency: c })).join(" + ") || "0.00";
+function renderSummary(sm) {
+  document.getElementById("kpi-matched").textContent = `${sm.matched_pct}%`;
+  document.getElementById("kpi-matched-sub").textContent = `${sm.matched} of ${sm.payments} payments; ${sm.exceptions} exceptions to review`;
+  document.getElementById("kpi-unreconciled").textContent = perCcy(sm.unreconciled);
+  document.getElementById("kpi-outstanding").textContent = perCcy(sm.outstanding);
+  document.getElementById("kpi-outstanding-sub").textContent = `${sm.invoices_by_outcome.overdue || 0} overdue invoice(s)`;
+  document.getElementById("kpi-pending").textContent = sm.pending_actions;
+}
+async function loadSummary() {
+  try { const r = await fetch("/api/reconciliation"); if (r.ok) renderSummary((await r.json()).summary); } catch (e) { /* tiles keep last value */ }
+}
+
+// ---------- audit ----------
+const AUDIT_TONE = { enqueued: "info", approved: "info", executing: "neutral", executed: "ok", failed: "bad",
+  rejected: "neutral", blocked: "bad", expired: "neutral" };
+let auditApi = null;
+const auditCols = [
+  { field: "seq", headerName: "#", width: 70, cellClass: "num", sort: "desc" },
+  { field: "at", headerName: "Time (UTC)", width: 180, cellClass: "num", valueFormatter: p => (p.value || "").replace("T", " ").slice(0, 19) },
+  { field: "event", headerName: "Event", width: 120, cellRenderer: p => `<span class="pill tone-${AUDIT_TONE[p.value] || "neutral"}">${esc(p.value)}</span>` },
+  { field: "type", headerName: "Action", width: 170, valueFormatter: p => ACTION[p.value] || p.value || "" },
+  { field: "target", headerName: "Target", width: 190, cellClass: "num" },
+  { field: "amount", headerName: "Amount", width: 120, type: "rightAligned", cellClass: "num",
+    valueFormatter: p => p.value ? money({ value: p.value.value, currency: p.value.currency_code }) : "" },
+  { field: "request_id", headerName: "PayPal-Request-Id", width: 170, cellClass: "num" },
+  { field: "by", headerName: "By", width: 100 },
+  { headerName: "Detail", flex: 1, minWidth: 200, tooltipValueGetter: p => p.value,
+    valueGetter: p => p.data.note || (p.data.violations || []).map(v => v.message).join("; ") || p.data.error ||
+      (p.data.result ? JSON.stringify(p.data.result) : "") },
+  { field: "hash", headerName: "Hash", width: 120, cellClass: "num", valueFormatter: p => (p.value || "").slice(0, 12) + "…",
+    tooltipValueGetter: p => p.value },
+];
+async function loadAudit() {
+  const banner = document.getElementById("chain-status");
+  try {
+    const r = await fetch("/api/audit");
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const a = await r.json(), v = a.verify;
+    banner.className = "chain " + (v.ok ? "ok" : "bad");
+    banner.textContent = v.ok ? `Chain intact: ${v.count} record(s), every hash links to the one before.`
+      : `Chain BROKEN at record ${v.first_bad_seq}: ${v.error}`;
+    document.getElementById("head-hash").textContent = v.head_hash || "-";
+    auditApi.setGridOption("rowData", a.records);
+  } catch (e) {
+    banner.className = "chain bad"; banner.textContent = "Could not load the audit log: " + e.message;
+  }
 }
 
 // ---------- approvals ----------
@@ -437,6 +512,8 @@ async function confirmAndRun() {
     err.textContent = e.message; run.disabled = false;
   }
   await loadApprovals();
+  await loadSummary();
+  await loadAudit();
 }
 
 async function loadApprovals() {
@@ -446,7 +523,6 @@ async function loadApprovals() {
     approvals = (await r.json()).items.slice().reverse();
     approvalsApi.setGridOption("rowData", approvals);
     approvalsApi.redrawRows();  // re-apply status row classes for updated items
-    requestAnimationFrame(() => approvalsApi.resetRowHeights());
     const pending = approvals.filter(i => i.status === "pending").length;
     document.querySelector('nav.tabs button[data-tab="approvals"]').textContent = pending ? `Approvals (${pending})` : "Approvals";
   } catch (e) {
@@ -461,7 +537,6 @@ document.addEventListener("DOMContentLoaded", () => {
     defaultColDef: { sortable: true, resizable: true, suppressHeaderMenuButton: true },
     getRowClass: p => ({ failed: "row-exception", blocked: "row-exception", pending: "row-attention" }[p.data.status] || ""),
     overlayNoRowsTemplate: '<span class="state">No proposed actions yet. Press “Propose actions” to let the agent suggest what to do.</span>',
-    onGridSizeChanged: e => e.api.resetRowHeights(),
     theme: gridOptions.theme,
   });
   document.getElementById("propose").onclick = async () => {
@@ -469,8 +544,21 @@ document.addEventListener("DOMContentLoaded", () => {
     try { const r = await post("/api/proposals/refresh");
       document.getElementById("approvals-note").textContent = `${r.enqueued} new proposal(s); ${r.skipped} already in the queue.`;
     } catch (e) { document.getElementById("approvals-note").textContent = "Could not propose: " + e.message; }
-    b.disabled = false; await loadApprovals();
+    b.disabled = false; await loadApprovals(); await loadSummary(); await loadAudit();
   };
+  auditApi = agGrid.createGrid(document.getElementById("audit-grid"), {
+    columnDefs: auditCols, rowData: [], getRowId: p => String(p.data.seq),
+    defaultColDef: { sortable: true, resizable: true, suppressHeaderMenuButton: true },
+    overlayNoRowsTemplate: '<span class="state">No audit records yet. Every proposal, approval, rejection and PayPal call is logged here.</span>',
+    theme: gridOptions.theme,
+  });
+  document.getElementById("copy-head").onclick = async () => {
+    const b = document.getElementById("copy-head");
+    try { await navigator.clipboard.writeText(document.getElementById("head-hash").textContent); b.textContent = "Copied"; }
+    catch (e) { b.textContent = "Copy failed"; }
+    setTimeout(() => b.textContent = "Copy", 1500);
+  };
+  loadAudit();
   document.getElementById("confirm-run").onclick = confirmAndRun;
   document.getElementById("confirm-cancel").onclick = () => document.getElementById("confirm").close();
   loadApprovals();
@@ -482,8 +570,9 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
     document.querySelectorAll("nav.tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
     document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + b.dataset.tab));
-    // grids measure auto-height rows only while visible
-    requestAnimationFrame(() => { gridApi.resetRowHeights(); approvalsApi.resetRowHeights(); });
+    // grids hidden behind a tab re-measure when shown
+    [gridApi, approvalsApi, auditApi].forEach(api => api.refreshCells({ force: true }));
+    if (b.dataset.tab === "audit") loadAudit();
   });
   load();
 });

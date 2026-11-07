@@ -72,3 +72,21 @@ def test_approve_only_runs_after_explicit_confirmation():
     handler = handler[:handler.index("\n}\n")]
     assert "/approve`" in handler and "/execute`" in handler
     assert i > 0
+
+
+def test_audit_tab_contract():
+    assert 'id="audit-grid"' in HTML and 'id="chain-status"' in HTML and 'id="head-hash"' in HTML
+    assert "/api/audit" in HTML
+    for field in ('"seq"', '"at"', '"event"', '"request_id"', '"hash"'):
+        assert f"field: {field}" in HTML, field
+    assert "Copy" in HTML  # the head hash can be copied to anchor the chain elsewhere
+
+
+def test_summary_header_contract():
+    for tile in ("kpi-matched", "kpi-unreconciled", "kpi-outstanding", "kpi-pending"):
+        assert f'id="{tile}"' in HTML, tile
+    assert "matched_pct" in HTML and "pending_actions" in HTML
+    # summary refreshes after approvals change
+    run = HTML[HTML.index("async function confirmAndRun"):]
+    run = run[:run.index("\n}\n")]
+    assert "loadSummary" in run or "load()" in run
