@@ -1,0 +1,2568 @@
+{
+  "total_pages": 1,
+  "total_items": 26,
+  "items": [
+    {
+      "id": "INV2-E5D6-8AE5-9C4A-F64F",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1001",
+        "reference": "Project 1001",
+        "invoice_date": "2026-10-01",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-10-31"
+        },
+        "metadata": {
+          "create_time": "2026-10-01T08:00:00Z",
+          "last_update_time": "2026-10-01T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-E5D6-8AE5-9C4A-F64F",
+          "first_sent_time": "2026-10-01T08:05:00Z",
+          "last_sent_time": "2026-10-01T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-E5D6-8AE5-9C4A-F64F"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Dana",
+              "surname": "Whitfield",
+              "full_name": "Dana Whitfield"
+            },
+            "business_name": "Harbor Lane Coffee",
+            "email_address": "dana@harborlane.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "D612C16AD7B0",
+          "name": "Brand identity refresh",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "1250.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "1250.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "1250.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-E5D6-8AE5-9C4A-F64F",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "1250.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "848FFC3E8D809BF1E",
+            "payment_date": "2026-10-09",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "1250.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-FA24-8E82-FE9F-2504",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1002",
+        "reference": "Project 1002",
+        "invoice_date": "2026-10-02",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-01"
+        },
+        "metadata": {
+          "create_time": "2026-10-02T08:00:00Z",
+          "last_update_time": "2026-10-02T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-FA24-8E82-FE9F-2504",
+          "first_sent_time": "2026-10-02T08:05:00Z",
+          "last_sent_time": "2026-10-02T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-FA24-8E82-FE9F-2504"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Omar",
+              "surname": "Reyes",
+              "full_name": "Omar Reyes"
+            },
+            "business_name": "Pinecrest Dental",
+            "email_address": "billing@pinecrest-dental.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "C124735B1F98",
+          "name": "Website care plan, Q4",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "860.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "860.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "860.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-FA24-8E82-FE9F-2504",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "860.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "5349CA6B818A5B93E",
+            "payment_date": "2026-10-10",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "860.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-0F22-A88C-91F8-391F",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1003",
+        "reference": "Project 1003",
+        "invoice_date": "2026-10-05",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-04"
+        },
+        "metadata": {
+          "create_time": "2026-10-05T08:00:00Z",
+          "last_update_time": "2026-10-05T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-0F22-A88C-91F8-391F",
+          "first_sent_time": "2026-10-05T08:05:00Z",
+          "last_sent_time": "2026-10-05T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-0F22-A88C-91F8-391F"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Priya",
+              "surname": "Nair",
+              "full_name": "Priya Nair"
+            },
+            "business_name": "Juniper & Sage Florists",
+            "email_address": "priya@junipersage.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "9E7D554DF95C",
+          "name": "Spring catalogue layout",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "425.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "425.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "425.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-0F22-A88C-91F8-391F",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "425.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "043FA8F1F7560B254",
+            "payment_date": "2026-10-12",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "425.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-EA04-817F-06AA-3551",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1004",
+        "reference": "Project 1004",
+        "invoice_date": "2026-10-06",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-05"
+        },
+        "metadata": {
+          "create_time": "2026-10-06T08:00:00Z",
+          "last_update_time": "2026-10-06T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-EA04-817F-06AA-3551",
+          "first_sent_time": "2026-10-06T08:05:00Z",
+          "last_sent_time": "2026-10-06T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-EA04-817F-06AA-3551"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Leo",
+              "surname": "Martins",
+              "full_name": "Leo Martins"
+            },
+            "business_name": "Brightside Tutoring",
+            "email_address": "leo@brightside.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "88B65CD973B0",
+          "name": "Learning portal UI design",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "1980.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "1980.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "1980.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-EA04-817F-06AA-3551",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "1980.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "1EBF34729829609DA",
+            "payment_date": "2026-10-14",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "1980.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-2F10-D753-C4E8-4AF9",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1005",
+        "reference": "Project 1005",
+        "invoice_date": "2026-10-08",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-07"
+        },
+        "metadata": {
+          "create_time": "2026-10-08T08:00:00Z",
+          "last_update_time": "2026-10-08T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-2F10-D753-C4E8-4AF9",
+          "first_sent_time": "2026-10-08T08:05:00Z",
+          "last_sent_time": "2026-10-08T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-2F10-D753-C4E8-4AF9"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Hana",
+              "surname": "Sato",
+              "full_name": "Hana Sato"
+            },
+            "business_name": "Copperfield Bikes",
+            "email_address": "hana@copperfield.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "D62186F82350",
+          "name": "Product photo retouching (40 images)",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "640.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "640.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "640.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-2F10-D753-C4E8-4AF9",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "640.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "03FE54AAC64E6A1BD",
+            "payment_date": "2026-10-16",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "640.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-C106-E840-C884-F67D",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1006",
+        "reference": "Project 1006",
+        "invoice_date": "2026-10-09",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-08"
+        },
+        "metadata": {
+          "create_time": "2026-10-09T08:00:00Z",
+          "last_update_time": "2026-10-09T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-C106-E840-C884-F67D",
+          "first_sent_time": "2026-10-09T08:05:00Z",
+          "last_sent_time": "2026-10-09T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-C106-E840-C884-F67D"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Grace",
+              "surname": "Kim",
+              "full_name": "Grace Kim"
+            },
+            "business_name": "Oakmont Realty",
+            "email_address": "accounts@oakmont.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "4EA1D76FEA28",
+          "name": "Listing site redesign, milestone 1",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "2750.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "2750.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "2750.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-C106-E840-C884-F67D",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "2750.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "3D084E2D06E5A98D4",
+            "payment_date": "2026-10-19",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "2750.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-048A-C70E-4DDD-90B6",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1007",
+        "reference": "Project 1007",
+        "invoice_date": "2026-10-12",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-11"
+        },
+        "metadata": {
+          "create_time": "2026-10-12T08:00:00Z",
+          "last_update_time": "2026-10-12T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-048A-C70E-4DDD-90B6",
+          "first_sent_time": "2026-10-12T08:05:00Z",
+          "last_sent_time": "2026-10-12T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-048A-C70E-4DDD-90B6"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Ben",
+              "surname": "Carter",
+              "full_name": "Ben Carter"
+            },
+            "business_name": "Northshore Yoga",
+            "email_address": "ben@northshore-yoga.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "F341376EE2C4",
+          "name": "Class schedule poster series",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "390.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "390.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "390.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-048A-C70E-4DDD-90B6",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "390.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "82A80D6C09ED86D56",
+            "payment_date": "2026-10-21",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "390.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-7627-5D09-57F0-F555",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1008",
+        "reference": "Project 1008",
+        "invoice_date": "2026-10-14",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-13"
+        },
+        "metadata": {
+          "create_time": "2026-10-14T08:00:00Z",
+          "last_update_time": "2026-10-14T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-7627-5D09-57F0-F555",
+          "first_sent_time": "2026-10-14T08:05:00Z",
+          "last_sent_time": "2026-10-14T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-7627-5D09-57F0-F555"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Sam",
+              "surname": "Ortiz",
+              "full_name": "Sam Ortiz"
+            },
+            "business_name": "Redwood Legal",
+            "email_address": "finance@redwood-legal.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "3CCEB6104B9F",
+          "name": "Pitch deck and report templates",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "3200.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "3200.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "3200.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-7627-5D09-57F0-F555",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "3200.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "7853CEBF3B9B50BEF",
+            "payment_date": "2026-10-24",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "3200.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-26D0-05E7-5EE8-0936",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1009",
+        "reference": "Project 1009",
+        "invoice_date": "2026-10-19",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-18"
+        },
+        "metadata": {
+          "create_time": "2026-10-19T08:00:00Z",
+          "last_update_time": "2026-10-19T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-26D0-05E7-5EE8-0936",
+          "first_sent_time": "2026-10-19T08:05:00Z",
+          "last_sent_time": "2026-10-19T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-26D0-05E7-5EE8-0936"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Ana",
+              "surname": "Lopez",
+              "full_name": "Ana Lopez"
+            },
+            "business_name": "Fieldstone Farms",
+            "email_address": "ana@fieldstone.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "63968F801944",
+          "name": "Farm stand signage",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "720.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "720.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "720.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-26D0-05E7-5EE8-0936",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "720.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "FF13797259FBC9120",
+            "payment_date": "2026-10-28",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "720.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-FF7A-E3D5-0CAF-B0DA",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1010",
+        "reference": "Project 1010",
+        "invoice_date": "2026-10-22",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-21"
+        },
+        "metadata": {
+          "create_time": "2026-10-22T08:00:00Z",
+          "last_update_time": "2026-10-22T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-FF7A-E3D5-0CAF-B0DA",
+          "first_sent_time": "2026-10-22T08:05:00Z",
+          "last_sent_time": "2026-10-22T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-FF7A-E3D5-0CAF-B0DA"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Jon",
+              "surname": "Park",
+              "full_name": "Jon Park"
+            },
+            "business_name": "Tidewater Kayaks",
+            "email_address": "jon@tidewater.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "F0D25DD417D1",
+          "name": "Booking flow UX audit",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "1100.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "1100.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "1100.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-FF7A-E3D5-0CAF-B0DA",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "1100.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "BEEFC4499C8309BD0",
+            "payment_date": "2026-11-02",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "1100.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-3A49-AA63-8EEC-DDFD",
+      "status": "SENT",
+      "detail": {
+        "invoice_number": "NW-1011",
+        "reference": "Project 1011",
+        "invoice_date": "2026-10-15",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-14"
+        },
+        "metadata": {
+          "create_time": "2026-10-15T08:00:00Z",
+          "last_update_time": "2026-10-15T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-3A49-AA63-8EEC-DDFD",
+          "first_sent_time": "2026-10-15T08:05:00Z",
+          "last_sent_time": "2026-10-15T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-3A49-AA63-8EEC-DDFD"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Omar",
+              "surname": "Reyes",
+              "full_name": "Omar Reyes"
+            },
+            "business_name": "Pinecrest Dental",
+            "email_address": "billing@pinecrest-dental.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "0B8EA452079A",
+          "name": "Appointment card reprint",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "315.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "315.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "315.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "315.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-3A49-AA63-8EEC-DDFD",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "id": "INV2-AFCF-7FAC-FF0B-5D51",
+      "status": "SENT",
+      "detail": {
+        "invoice_number": "NW-1012",
+        "reference": "Project 1012",
+        "invoice_date": "2026-10-20",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-19"
+        },
+        "metadata": {
+          "create_time": "2026-10-20T08:00:00Z",
+          "last_update_time": "2026-10-20T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-AFCF-7FAC-FF0B-5D51",
+          "first_sent_time": "2026-10-20T08:05:00Z",
+          "last_sent_time": "2026-10-20T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-AFCF-7FAC-FF0B-5D51"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Hana",
+              "surname": "Sato",
+              "full_name": "Hana Sato"
+            },
+            "business_name": "Copperfield Bikes",
+            "email_address": "hana@copperfield.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "79E69523D809",
+          "name": "Spring campaign social kit",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "980.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "980.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "980.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "980.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-AFCF-7FAC-FF0B-5D51",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "id": "INV2-D256-9A02-708E-398B",
+      "status": "PARTIALLY_PAID",
+      "detail": {
+        "invoice_number": "NW-1013",
+        "reference": "Project 1013",
+        "invoice_date": "2026-10-13",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-12"
+        },
+        "metadata": {
+          "create_time": "2026-10-13T08:00:00Z",
+          "last_update_time": "2026-10-13T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-D256-9A02-708E-398B",
+          "first_sent_time": "2026-10-13T08:05:00Z",
+          "last_sent_time": "2026-10-13T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-D256-9A02-708E-398B"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Grace",
+              "surname": "Kim",
+              "full_name": "Grace Kim"
+            },
+            "business_name": "Oakmont Realty",
+            "email_address": "accounts@oakmont.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "517788B43ED3",
+          "name": "Agent headshot session edit",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "1200.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": true
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "1200.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "1200.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "600.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-D256-9A02-708E-398B",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "600.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "684DFE3D033F64DB8",
+            "payment_date": "2026-10-23",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "600.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-1B00-8797-3E32-BB52",
+      "status": "SENT",
+      "detail": {
+        "invoice_number": "NW-1014",
+        "reference": "Project 1014",
+        "invoice_date": "2026-10-16",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-15"
+        },
+        "metadata": {
+          "create_time": "2026-10-16T08:00:00Z",
+          "last_update_time": "2026-10-16T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-1B00-8797-3E32-BB52",
+          "first_sent_time": "2026-10-16T08:05:00Z",
+          "last_sent_time": "2026-10-16T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-1B00-8797-3E32-BB52"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Priya",
+              "surname": "Nair",
+              "full_name": "Priya Nair"
+            },
+            "business_name": "Juniper & Sage Florists",
+            "email_address": "priya@junipersage.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "9A72381E8CFB",
+          "name": "Wedding season flyer set",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "450.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "450.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "450.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "450.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-1B00-8797-3E32-BB52",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "id": "INV2-E8F2-6876-3C34-0542",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1015",
+        "reference": "Project 1015",
+        "invoice_date": "2026-10-18",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-17"
+        },
+        "metadata": {
+          "create_time": "2026-10-18T08:00:00Z",
+          "last_update_time": "2026-10-18T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-E8F2-6876-3C34-0542",
+          "first_sent_time": "2026-10-18T08:05:00Z",
+          "last_sent_time": "2026-10-18T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-E8F2-6876-3C34-0542"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Leo",
+              "surname": "Martins",
+              "full_name": "Leo Martins"
+            },
+            "business_name": "Brightside Tutoring",
+            "email_address": "leo@brightside.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "FF3585A1BE9B",
+          "name": "Tutor onboarding illustrations",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "800.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "800.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "800.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-E8F2-6876-3C34-0542",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "800.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "092BA033726F8904B",
+            "payment_date": "2026-10-29",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "800.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-4A75-4715-5B02-7620",
+      "status": "SENT",
+      "detail": {
+        "invoice_number": "NW-1016",
+        "reference": "Project 1016",
+        "invoice_date": "2026-09-25",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-10-25"
+        },
+        "metadata": {
+          "create_time": "2026-09-25T08:00:00Z",
+          "last_update_time": "2026-09-25T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-4A75-4715-5B02-7620",
+          "first_sent_time": "2026-09-25T08:05:00Z",
+          "last_sent_time": "2026-10-28T09:00:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-4A75-4715-5B02-7620"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Sam",
+              "surname": "Ortiz",
+              "full_name": "Sam Ortiz"
+            },
+            "business_name": "Redwood Legal",
+            "email_address": "finance@redwood-legal.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "F3A19DC84F01",
+          "name": "Annual report design",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "2400.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "2400.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "2400.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "2400.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-4A75-4715-5B02-7620",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "id": "INV2-7933-ECF9-CBDF-500C",
+      "status": "SENT",
+      "detail": {
+        "invoice_number": "NW-1017",
+        "reference": "Project 1017",
+        "invoice_date": "2026-10-01",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-10-31"
+        },
+        "metadata": {
+          "create_time": "2026-10-01T08:00:00Z",
+          "last_update_time": "2026-10-01T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-7933-ECF9-CBDF-500C",
+          "first_sent_time": "2026-10-01T08:05:00Z",
+          "last_sent_time": "2026-10-01T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-7933-ECF9-CBDF-500C"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Jon",
+              "surname": "Park",
+              "full_name": "Jon Park"
+            },
+            "business_name": "Tidewater Kayaks",
+            "email_address": "jon@tidewater.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "9259C01037FA",
+          "name": "Rental waiver form layout",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "350.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "350.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "350.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "350.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-7933-ECF9-CBDF-500C",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "id": "INV2-A75A-BB39-CEDD-3975",
+      "status": "SENT",
+      "detail": {
+        "invoice_number": "NW-1018",
+        "reference": "Project 1018",
+        "invoice_date": "2026-11-02",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-12-02"
+        },
+        "metadata": {
+          "create_time": "2026-11-02T08:00:00Z",
+          "last_update_time": "2026-11-02T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-A75A-BB39-CEDD-3975",
+          "first_sent_time": "2026-11-02T08:05:00Z",
+          "last_sent_time": "2026-11-02T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-A75A-BB39-CEDD-3975"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Dana",
+              "surname": "Whitfield",
+              "full_name": "Dana Whitfield"
+            },
+            "business_name": "Harbor Lane Coffee",
+            "email_address": "dana@harborlane.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "7EE086FFD23C",
+          "name": "Holiday menu boards",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "680.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "680.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "680.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "680.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-A75A-BB39-CEDD-3975",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "id": "INV2-C20B-99C3-C23B-56E9",
+      "status": "SENT",
+      "detail": {
+        "invoice_number": "NW-1019",
+        "reference": "Project 1019",
+        "invoice_date": "2026-11-04",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-12-04"
+        },
+        "metadata": {
+          "create_time": "2026-11-04T08:00:00Z",
+          "last_update_time": "2026-11-04T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-C20B-99C3-C23B-56E9",
+          "first_sent_time": "2026-11-04T08:05:00Z",
+          "last_sent_time": "2026-11-04T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-C20B-99C3-C23B-56E9"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Ana",
+              "surname": "Lopez",
+              "full_name": "Ana Lopez"
+            },
+            "business_name": "Fieldstone Farms",
+            "email_address": "ana@fieldstone.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "B8BA016E6CC0",
+          "name": "CSA box packaging design",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "1250.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "1250.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "1250.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "1250.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-C20B-99C3-C23B-56E9",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "id": "INV2-D36A-5900-4F70-27F3",
+      "status": "SENT",
+      "detail": {
+        "invoice_number": "NW-1020",
+        "reference": "Project 1020",
+        "invoice_date": "2026-10-17",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-16"
+        },
+        "metadata": {
+          "create_time": "2026-10-17T08:00:00Z",
+          "last_update_time": "2026-10-17T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-D36A-5900-4F70-27F3",
+          "first_sent_time": "2026-10-17T08:05:00Z",
+          "last_sent_time": "2026-10-17T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-D36A-5900-4F70-27F3"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Ben",
+              "surname": "Carter",
+              "full_name": "Ben Carter"
+            },
+            "business_name": "Northshore Yoga",
+            "email_address": "ben@northshore-yoga.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "F21B6EB51BC3",
+          "name": "October class pass artwork",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "500.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "500.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "500.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "500.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-D36A-5900-4F70-27F3",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "id": "INV2-FBCA-8166-3522-D82E",
+      "status": "SENT",
+      "detail": {
+        "invoice_number": "NW-1021",
+        "reference": "Project 1021",
+        "invoice_date": "2026-10-10",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-09"
+        },
+        "metadata": {
+          "create_time": "2026-10-10T08:00:00Z",
+          "last_update_time": "2026-10-10T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-FBCA-8166-3522-D82E",
+          "first_sent_time": "2026-10-10T08:05:00Z",
+          "last_sent_time": "2026-10-10T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-FBCA-8166-3522-D82E"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Maria",
+              "surname": "Lumen",
+              "full_name": "Maria Lumen"
+            },
+            "business_name": "Lumen Bakery",
+            "email_address": "ap@lumen-bakery.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "431E9A35AE5B",
+          "name": "Website retainer, October",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "1500.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "1500.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "1500.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "1500.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-FBCA-8166-3522-D82E",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "id": "INV2-659D-04F4-29F8-0457",
+      "status": "PAID",
+      "detail": {
+        "invoice_number": "NW-1022",
+        "reference": "Project 1022",
+        "invoice_date": "2026-10-07",
+        "currency_code": "EUR",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-06"
+        },
+        "metadata": {
+          "create_time": "2026-10-07T08:00:00Z",
+          "last_update_time": "2026-10-07T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-659D-04F4-29F8-0457",
+          "first_sent_time": "2026-10-07T08:05:00Z",
+          "last_sent_time": "2026-10-07T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-659D-04F4-29F8-0457"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Klara",
+              "surname": "Vogel",
+              "full_name": "Klara Vogel"
+            },
+            "business_name": "Atelier Vogel",
+            "email_address": "klara@atelier-vogel.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "53E43994BCE3",
+          "name": "Exhibition catalogue design",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "EUR",
+            "value": "900.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "EUR",
+        "value": "900.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "EUR",
+            "value": "900.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "EUR",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-659D-04F4-29F8-0457",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "EUR",
+          "value": "900.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "D14B8861D0925D2D6",
+            "payment_date": "2026-10-20",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "EUR",
+              "value": "900.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-7C63-7746-C016-8B30",
+      "status": "SENT",
+      "detail": {
+        "invoice_number": "NW-1023",
+        "reference": "Project 1023",
+        "invoice_date": "2026-10-11",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-10"
+        },
+        "metadata": {
+          "create_time": "2026-10-11T08:00:00Z",
+          "last_update_time": "2026-10-11T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-7C63-7746-C016-8B30",
+          "first_sent_time": "2026-10-11T08:05:00Z",
+          "last_sent_time": "2026-10-11T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-7C63-7746-C016-8B30"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Luc",
+              "surname": "Durand",
+              "full_name": "Luc Durand"
+            },
+            "business_name": "Maison Durand",
+            "email_address": "luc@maison-durand.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "24818F2EB0BA",
+          "name": "Packaging mock-ups",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "1000.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "1000.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "1000.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "1000.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-7C63-7746-C016-8B30",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "id": "INV2-F658-A1B9-AAAE-9821",
+      "status": "REFUNDED",
+      "detail": {
+        "invoice_number": "NW-1024",
+        "reference": "Project 1024",
+        "invoice_date": "2026-10-03",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-02"
+        },
+        "metadata": {
+          "create_time": "2026-10-03T08:00:00Z",
+          "last_update_time": "2026-10-03T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-F658-A1B9-AAAE-9821",
+          "first_sent_time": "2026-10-03T08:05:00Z",
+          "last_sent_time": "2026-10-03T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-F658-A1B9-AAAE-9821"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Priya",
+              "surname": "Nair",
+              "full_name": "Priya Nair"
+            },
+            "business_name": "Juniper & Sage Florists",
+            "email_address": "priya@junipersage.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "23C4856CF2E4",
+          "name": "Valentine's promo banner",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "300.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "300.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "300.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "0.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-F658-A1B9-AAAE-9821",
+          "rel": "self",
+          "method": "GET"
+        }
+      ],
+      "payments": {
+        "paid_amount": {
+          "currency_code": "USD",
+          "value": "300.00"
+        },
+        "transactions": [
+          {
+            "payment_id": "B1DF078C6AAED5652",
+            "payment_date": "2026-10-11",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "300.00"
+            }
+          }
+        ]
+      },
+      "refunds": {
+        "refund_amount": {
+          "currency_code": "USD",
+          "value": "300.00"
+        },
+        "transactions": [
+          {
+            "refund_id": "BE03405A39EE75160",
+            "refund_date": "2026-10-15",
+            "type": "PAYPAL",
+            "method": "PAYPAL",
+            "amount": {
+              "currency_code": "USD",
+              "value": "300.00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "INV2-FFB9-B624-1F01-2365",
+      "status": "PAYMENT_PENDING",
+      "detail": {
+        "invoice_number": "NW-1025",
+        "reference": "Project 1025",
+        "invoice_date": "2026-10-26",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-11-25"
+        },
+        "metadata": {
+          "create_time": "2026-10-26T08:00:00Z",
+          "last_update_time": "2026-10-26T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-FFB9-B624-1F01-2365",
+          "first_sent_time": "2026-10-26T08:05:00Z",
+          "last_sent_time": "2026-10-26T08:05:00Z",
+          "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-FFB9-B624-1F01-2365"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Grace",
+              "surname": "Kim",
+              "full_name": "Grace Kim"
+            },
+            "business_name": "Oakmont Realty",
+            "email_address": "accounts@oakmont.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "F7B2552B1BD4",
+          "name": "Open house flyer pack",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "650.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "650.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "650.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "650.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-FFB9-B624-1F01-2365",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "id": "INV2-AC4B-F32B-0325-9522",
+      "status": "DRAFT",
+      "detail": {
+        "invoice_number": "NW-1026",
+        "reference": "Project 1026",
+        "invoice_date": "2026-11-06",
+        "currency_code": "USD",
+        "note": "Thank you for working with Northwind Studio.",
+        "terms_and_conditions": "Payment due within 30 days.",
+        "payment_term": {
+          "term_type": "NET_30",
+          "due_date": "2026-12-06"
+        },
+        "metadata": {
+          "create_time": "2026-11-06T08:00:00Z",
+          "last_update_time": "2026-11-06T08:00:00Z",
+          "created_by_flow": "REGULAR_SINGLE",
+          "invoicer_view_url": "https://www.sandbox.paypal.com/invoice/details/INV2-AC4B-F32B-0325-9522"
+        }
+      },
+      "invoicer": {
+        "name": {
+          "given_name": "Ada",
+          "surname": "Norberg"
+        },
+        "business_name": "Northwind Studio",
+        "email_address": "billing@northwind-studio.example.com",
+        "website": "https://northwind-studio.example.com"
+      },
+      "primary_recipients": [
+        {
+          "billing_info": {
+            "name": {
+              "given_name": "Leo",
+              "surname": "Martins",
+              "full_name": "Leo Martins"
+            },
+            "business_name": "Brightside Tutoring",
+            "email_address": "leo@brightside.example.com",
+            "language": "en-US"
+          }
+        }
+      ],
+      "items": [
+        {
+          "id": "E55E6378D289",
+          "name": "Parent newsletter template",
+          "quantity": "1",
+          "unit_amount": {
+            "currency_code": "USD",
+            "value": "540.00"
+          },
+          "unit_of_measure": "AMOUNT"
+        }
+      ],
+      "configuration": {
+        "partial_payment": {
+          "allow_partial_payment": false
+        },
+        "allow_tip": false,
+        "tax_inclusive": false
+      },
+      "amount": {
+        "currency_code": "USD",
+        "value": "540.00",
+        "breakdown": {
+          "item_total": {
+            "currency_code": "USD",
+            "value": "540.00"
+          }
+        }
+      },
+      "due_amount": {
+        "currency_code": "USD",
+        "value": "540.00"
+      },
+      "links": [
+        {
+          "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-AC4B-F32B-0325-9522",
+          "rel": "self",
+          "method": "GET"
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "href": "https://api-m.sandbox.paypal.com/v2/invoicing/invoices?page=1&page_size=100&total_required=true",
+      "rel": "self",
+      "method": "GET"
+    }
+  ]
+}

@@ -1,0 +1,219 @@
+{
+  "clean_match": {
+    "description": "Payment clearly belongs to one open invoice. NW-1001..1010 carry the invoice number (rule 1); NW-1011..1012 match on exact amount plus payer email (rule 2).",
+    "invoices": [
+      "NW-1001",
+      "NW-1002",
+      "NW-1003",
+      "NW-1004",
+      "NW-1005",
+      "NW-1006",
+      "NW-1007",
+      "NW-1008",
+      "NW-1009",
+      "NW-1010",
+      "NW-1011",
+      "NW-1012"
+    ],
+    "transactions": [
+      "848FFC3E8D809BF1E",
+      "5349CA6B818A5B93E",
+      "043FA8F1F7560B254",
+      "1EBF34729829609DA",
+      "03FE54AAC64E6A1BD",
+      "3D084E2D06E5A98D4",
+      "82A80D6C09ED86D56",
+      "7853CEBF3B9B50BEF",
+      "FF13797259FBC9120",
+      "BEEFC4499C8309BD0",
+      "E0B3D0459E765C3C7",
+      "9A5C708D184B996A0"
+    ],
+    "expected": {
+      "848FFC3E8D809BF1E": "matched",
+      "5349CA6B818A5B93E": "matched",
+      "043FA8F1F7560B254": "matched",
+      "1EBF34729829609DA": "matched",
+      "03FE54AAC64E6A1BD": "matched",
+      "3D084E2D06E5A98D4": "matched",
+      "82A80D6C09ED86D56": "matched",
+      "7853CEBF3B9B50BEF": "matched",
+      "FF13797259FBC9120": "matched",
+      "BEEFC4499C8309BD0": "matched",
+      "E0B3D0459E765C3C7": "matched",
+      "9A5C708D184B996A0": "matched"
+    }
+  },
+  "partial_payment": {
+    "description": "Half of a 1200.00 invoice paid; 600.00 still due.",
+    "invoices": [
+      "NW-1013"
+    ],
+    "transactions": [
+      "684DFE3D033F64DB8"
+    ],
+    "expected": {
+      "684DFE3D033F64DB8": "partial"
+    }
+  },
+  "overpayment": {
+    "description": "495.00 received for a 450.00 invoice (rush tip in the note).",
+    "invoices": [
+      "NW-1014"
+    ],
+    "transactions": [
+      "6FC0EA11FF213AF9E"
+    ],
+    "expected": {
+      "6FC0EA11FF213AF9E": "overpaid"
+    }
+  },
+  "duplicate_payment": {
+    "description": "Double checkout: two 800.00 captures 98 seconds apart for one invoice. The second is the refund candidate.",
+    "invoices": [
+      "NW-1015"
+    ],
+    "transactions": [
+      "092BA033726F8904B",
+      "5E9D76CF99B890BE0"
+    ],
+    "expected": {
+      "092BA033726F8904B": "matched",
+      "5E9D76CF99B890BE0": "duplicate"
+    },
+    "proposed_action": {
+      "type": "refund_capture",
+      "transaction": "5E9D76CF99B890BE0"
+    }
+  },
+  "payment_without_invoice": {
+    "description": "Money received with no invoice behind it (a deposit and a small licence sale).",
+    "invoices": [],
+    "transactions": [
+      "934B6BF994C1A1552",
+      "6DDAAD0BD05B87560"
+    ],
+    "expected": {
+      "934B6BF994C1A1552": "unmatched",
+      "6DDAAD0BD05B87560": "unmatched"
+    },
+    "proposed_action": {
+      "type": "create_draft_invoice",
+      "transaction": "934B6BF994C1A1552"
+    }
+  },
+  "overdue_unpaid": {
+    "description": "Sent invoices past their due date (as of 2026-11-07) with no payment.",
+    "invoices": [
+      "NW-1016",
+      "NW-1017"
+    ],
+    "transactions": [],
+    "expected": {
+      "NW-1016": "overdue",
+      "NW-1017": "overdue"
+    },
+    "proposed_action": {
+      "type": "send_reminder",
+      "invoice": "NW-1016"
+    }
+  },
+  "fee_only_difference": {
+    "description": "Payer sent 500.00 minus PayPal's fee (482.06); difference equals the fee.",
+    "invoices": [
+      "NW-1020"
+    ],
+    "transactions": [
+      "40EF90A02E577BC91"
+    ],
+    "expected": {
+      "40EF90A02E577BC91": "fee_mismatch"
+    }
+  },
+  "payer_email_differs": {
+    "description": "Invoice went to ap@lumen-bakery; the owner paid from a personal address. Only the memo ('Lumen Bakery - October website retainer') links them, so the AI resolves it.",
+    "invoices": [
+      "NW-1021"
+    ],
+    "transactions": [
+      "A878C16AB129834C9"
+    ],
+    "expected": {
+      "A878C16AB129834C9": "matched"
+    },
+    "resolved_by": "ai"
+  },
+  "different_currency": {
+    "description": "NW-1022 is a clean EUR match. NW-1023 is a USD invoice paid in EUR (920.00 EUR for 1000.00 USD), so it is flagged rather than matched.",
+    "invoices": [
+      "NW-1022",
+      "NW-1023"
+    ],
+    "transactions": [
+      "D14B8861D0925D2D6",
+      "0092FF64160B7CCCA"
+    ],
+    "expected": {
+      "D14B8861D0925D2D6": "matched",
+      "0092FF64160B7CCCA": "currency_mismatch"
+    }
+  },
+  "refunded_transaction": {
+    "description": "Paid, then fully refunded (T1107 row points back to the original; original status V).",
+    "invoices": [
+      "NW-1024"
+    ],
+    "transactions": [
+      "B1DF078C6AAED5652",
+      "BE03405A39EE75160"
+    ],
+    "expected": {
+      "B1DF078C6AAED5652": "refunded",
+      "BE03405A39EE75160": "refund"
+    }
+  },
+  "pending_transaction": {
+    "description": "eCheck not cleared yet (status P); not counted as paid.",
+    "invoices": [
+      "NW-1025"
+    ],
+    "transactions": [
+      "D26CF1D282F39AE1E"
+    ],
+    "expected": {
+      "D26CF1D282F39AE1E": "pending"
+    }
+  },
+  "open_not_due": {
+    "description": "Sent invoices that are not due yet; no action.",
+    "invoices": [
+      "NW-1018",
+      "NW-1019"
+    ],
+    "transactions": [],
+    "expected": {
+      "NW-1018": "open",
+      "NW-1019": "open"
+    }
+  },
+  "draft_invoice": {
+    "description": "Never sent; ignored by matching and collections.",
+    "invoices": [
+      "NW-1026"
+    ],
+    "transactions": [],
+    "expected": {
+      "NW-1026": "draft"
+    }
+  },
+  "non_sales_transaction": {
+    "description": "Withdrawal to the bank (T0400); not a customer payment, ignored.",
+    "invoices": [],
+    "transactions": [
+      "E60BEAC3F316EE49A"
+    ],
+    "expected": {
+      "E60BEAC3F316EE49A": "ignored"
+    }
+  }
+}

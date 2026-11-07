@@ -1,0 +1,439 @@
+{
+ "invoicing_v2:address_details": {
+  "building_name": null,
+  "delivery_service": null,
+  "street_name": null,
+  "street_number": null,
+  "street_type": null,
+  "sub_building": null
+ },
+ "invoicing_v2:address_portable": {
+  "address_details": "address_details",
+  "address_line_1": null,
+  "address_line_2": null,
+  "address_line_3": null,
+  "admin_area_1": null,
+  "admin_area_2": null,
+  "admin_area_3": null,
+  "admin_area_4": null,
+  "country_code": "country_code",
+  "postal_code": null
+ },
+ "invoicing_v2:aggregated_discount": {
+  "invoice_discount": "discount",
+  "item_discount": "money"
+ },
+ "invoicing_v2:amount_summary_detail": {
+  "breakdown": "amount_with_breakdown",
+  "currency_code": "currency_code",
+  "value": null
+ },
+ "invoicing_v2:amount_with_breakdown": {
+  "custom": "custom_amount",
+  "discount": "aggregated_discount",
+  "item_total": "money",
+  "shipping": "shipping_cost",
+  "tax_total": "money"
+ },
+ "invoicing_v2:billing_info": {
+  "additional_info": null,
+  "address": "address_portable",
+  "business_name": null,
+  "email_address": "restrictive_email_address",
+  "language": "language",
+  "name": "name",
+  "phones": "definitions-phone_detail_list"
+ },
+ "invoicing_v2:configuration": {
+  "allow_tip": null,
+  "has_conditional_rule": null,
+  "partial_payment": "partial_payment",
+  "tax_calculated_after_discount": null,
+  "tax_inclusive": null,
+  "template_id": null
+ },
+ "invoicing_v2:contact_name_address": {
+  "address": "address_portable",
+  "business_name": null,
+  "name": "name"
+ },
+ "invoicing_v2:country_code": {},
+ "invoicing_v2:currency_code": {},
+ "invoicing_v2:custom_amount": {
+  "amount": "money",
+  "label": null
+ },
+ "invoicing_v2:date_no_time": {},
+ "invoicing_v2:date_time": {},
+ "invoicing_v2:definitions-phone_detail_list": {
+  "__items__": "phone_detail"
+ },
+ "invoicing_v2:discount": {
+  "amount": "money",
+  "percent": "percentage"
+ },
+ "invoicing_v2:email_address": {},
+ "invoicing_v2:email_address_list": {
+  "__items__": "email_address"
+ },
+ "invoicing_v2:file_reference": {
+  "content_type": null,
+  "create_time": "date_time",
+  "id": null,
+  "reference_url": null,
+  "size": null
+ },
+ "invoicing_v2:file_reference_list": {
+  "__items__": "file_reference"
+ },
+ "invoicing_v2:invoice": {
+  "additional_recipients": "email_address_list",
+  "amount": "amount_summary_detail",
+  "configuration": "configuration",
+  "detail": "invoice_detail",
+  "due_amount": "money",
+  "gratuity": "money",
+  "id": null,
+  "invoicer": "invoicer_info",
+  "items": "item_list",
+  "links": "link_description_list",
+  "parent_id": null,
+  "payments": "payments",
+  "primary_recipients": "recipient_info_list",
+  "refunds": "refunds",
+  "status": "invoice_status"
+ },
+ "invoicing_v2:invoice_creation_flow": {},
+ "invoicing_v2:invoice_detail": {
+  "attachments": "file_reference_list",
+  "currency_code": "currency_code",
+  "invoice_date": "date_no_time",
+  "invoice_number": null,
+  "memo": null,
+  "metadata": "metadata",
+  "note": null,
+  "payment_term": "invoice_payment_term",
+  "reference": null,
+  "terms_and_conditions": null
+ },
+ "invoicing_v2:invoice_list": {
+  "__items__": "invoice"
+ },
+ "invoicing_v2:invoice_payment_term": {
+  "due_date": "date_no_time",
+  "term_type": "payment_term_type"
+ },
+ "invoicing_v2:invoice_status": {},
+ "invoicing_v2:invoicer_info": {
+  "additional_notes": null,
+  "address": "address_portable",
+  "business_name": null,
+  "email_address": "restrictive_email_address",
+  "logo_url": null,
+  "name": "name",
+  "phones": "phone_detail_list",
+  "tax_id": null,
+  "website": null
+ },
+ "invoicing_v2:invoices": {
+  "items": "invoice_list",
+  "links": "link_description_list",
+  "total_items": null,
+  "total_pages": null
+ },
+ "invoicing_v2:item": {
+  "description": null,
+  "discount": "discount",
+  "id": null,
+  "item_date": "date_no_time",
+  "name": null,
+  "quantity": null,
+  "tax": "tax",
+  "unit_amount": "money",
+  "unit_of_measure": "unit_of_measure"
+ },
+ "invoicing_v2:item_list": {
+  "__items__": "item"
+ },
+ "invoicing_v2:language": {},
+ "invoicing_v2:link_description": {
+  "href": null,
+  "method": null,
+  "rel": null
+ },
+ "invoicing_v2:link_description_list": {
+  "__items__": "link_description"
+ },
+ "invoicing_v2:metadata": {
+  "cancel_time": "date_time",
+  "cancelled_by": null,
+  "create_time": "date_time",
+  "created_by": null,
+  "created_by_flow": "invoice_creation_flow",
+  "first_sent_time": "date_time",
+  "invoicer_view_url": null,
+  "last_sent_by": null,
+  "last_sent_time": "date_time",
+  "last_update_time": "date_time",
+  "last_updated_by": null,
+  "recipient_view_url": null
+ },
+ "invoicing_v2:money": {
+  "currency_code": "currency_code",
+  "value": null
+ },
+ "invoicing_v2:name": {
+  "alternate_full_name": null,
+  "full_name": null,
+  "given_name": null,
+  "middle_name": null,
+  "prefix": null,
+  "suffix": null,
+  "surname": null
+ },
+ "invoicing_v2:partial_payment": {
+  "allow_partial_payment": null,
+  "minimum_amount_due": "money"
+ },
+ "invoicing_v2:payment_detail": {
+  "amount": "money",
+  "method": "payment_method",
+  "note": null,
+  "payment_date": "date_no_time",
+  "payment_id": null,
+  "shipping_info": "contact_name_address",
+  "type": "payment_type"
+ },
+ "invoicing_v2:payment_detail_list": {
+  "__items__": "payment_detail"
+ },
+ "invoicing_v2:payment_method": {},
+ "invoicing_v2:payment_term_type": {},
+ "invoicing_v2:payment_type": {},
+ "invoicing_v2:payments": {
+  "paid_amount": "money",
+  "transactions": "payment_detail_list"
+ },
+ "invoicing_v2:percentage": {},
+ "invoicing_v2:phone_detail": {
+  "country_code": null,
+  "extension_number": null,
+  "national_number": null,
+  "phone_type": "phone_type"
+ },
+ "invoicing_v2:phone_detail_list": {
+  "__items__": "phone_detail"
+ },
+ "invoicing_v2:phone_type": {},
+ "invoicing_v2:recipient_info": {
+  "billing_info": "billing_info",
+  "shipping_info": "contact_name_address"
+ },
+ "invoicing_v2:recipient_info_list": {
+  "__items__": "recipient_info"
+ },
+ "invoicing_v2:refund_detail": {
+  "amount": "money",
+  "method": "payment_method",
+  "refund_date": "date_no_time",
+  "refund_id": null,
+  "type": "payment_type"
+ },
+ "invoicing_v2:refund_detail_list": {
+  "__items__": "refund_detail"
+ },
+ "invoicing_v2:refunds": {
+  "refund_amount": "money",
+  "transactions": "refund_detail_list"
+ },
+ "invoicing_v2:restrictive_email_address": {},
+ "invoicing_v2:shipping_cost": {
+  "amount": "money",
+  "tax": "tax"
+ },
+ "invoicing_v2:tax": {
+  "amount": "money",
+  "name": null,
+  "percent": "percentage",
+  "tax_note": null
+ },
+ "invoicing_v2:unit_of_measure": {},
+ "reporting_transactions_v1:address": {
+  "city": null,
+  "country_code": "country_code",
+  "line1": null,
+  "line2": null,
+  "postal_code": null,
+  "state": null
+ },
+ "reporting_transactions_v1:auction_info": {
+  "auction_buyer_id": null,
+  "auction_closing_date": "date_time",
+  "auction_item_site": null,
+  "auction_site": null
+ },
+ "reporting_transactions_v1:cart_info": {
+  "item_details": "item_detail_list",
+  "paypal_invoice_id": null,
+  "tax_inclusive": null
+ },
+ "reporting_transactions_v1:checkout_option": {
+  "checkout_option_name": null,
+  "checkout_option_value": null
+ },
+ "reporting_transactions_v1:checkout_option_list": {
+  "__items__": "checkout_option"
+ },
+ "reporting_transactions_v1:country_code": {},
+ "reporting_transactions_v1:currency_code": {},
+ "reporting_transactions_v1:date_time": {},
+ "reporting_transactions_v1:email_address": {},
+ "reporting_transactions_v1:incentive_detail": {
+  "incentive_amount": "money",
+  "incentive_code": null,
+  "incentive_program_code": null,
+  "incentive_type": null
+ },
+ "reporting_transactions_v1:incentive_detail_list": {
+  "__items__": "incentive_detail"
+ },
+ "reporting_transactions_v1:incentive_info": {
+  "incentive_details": "incentive_detail_list"
+ },
+ "reporting_transactions_v1:item_detail": {
+  "adjustment_amount": "money",
+  "basic_shipping_amount": "money",
+  "checkout_options": "checkout_option_list",
+  "discount_amount": "money",
+  "extra_shipping_amount": "money",
+  "gift_wrap_amount": "money",
+  "handling_amount": "money",
+  "insurance_amount": "money",
+  "invoice_number": null,
+  "item_amount": "money",
+  "item_code": null,
+  "item_description": null,
+  "item_name": null,
+  "item_options": null,
+  "item_quantity": null,
+  "item_unit_price": "money",
+  "tax_amounts": "item_detail_tax_amount_list",
+  "tax_percentage": "percentage",
+  "total_item_amount": "money"
+ },
+ "reporting_transactions_v1:item_detail_list": {
+  "__items__": "item_detail"
+ },
+ "reporting_transactions_v1:item_detail_tax_amount": {
+  "tax_amount": "money"
+ },
+ "reporting_transactions_v1:item_detail_tax_amount_list": {
+  "__items__": "item_detail_tax_amount"
+ },
+ "reporting_transactions_v1:link_description": {
+  "href": null,
+  "method": null,
+  "rel": null
+ },
+ "reporting_transactions_v1:link_description_list": {
+  "__items__": "link_description"
+ },
+ "reporting_transactions_v1:money": {
+  "currency_code": "currency_code",
+  "value": null
+ },
+ "reporting_transactions_v1:name": {
+  "alternate_full_name": null,
+  "full_name": null,
+  "given_name": null,
+  "middle_name": null,
+  "prefix": null,
+  "suffix": null,
+  "surname": null
+ },
+ "reporting_transactions_v1:payer_info": {
+  "account_id": null,
+  "address": "address",
+  "address_status": null,
+  "country_code": "country_code",
+  "email_address": "email_address",
+  "payer_name": "name",
+  "payer_status": null,
+  "phone_number": "phone"
+ },
+ "reporting_transactions_v1:percentage": {},
+ "reporting_transactions_v1:phone": {
+  "country_code": null,
+  "extension_number": null,
+  "national_number": null
+ },
+ "reporting_transactions_v1:search_response": {
+  "account_number": null,
+  "end_date": "date_time",
+  "last_refreshed_datetime": "date_time",
+  "links": "link_description_list",
+  "page": null,
+  "start_date": "date_time",
+  "total_items": null,
+  "total_pages": null,
+  "transaction_details": "transaction_detail_list"
+ },
+ "reporting_transactions_v1:shipping_info": {
+  "address": "address",
+  "method": null,
+  "name": null,
+  "secondary_shipping_address": "address"
+ },
+ "reporting_transactions_v1:store_info": {
+  "store_id": null,
+  "terminal_id": null
+ },
+ "reporting_transactions_v1:transaction_detail": {
+  "auction_info": "auction_info",
+  "cart_info": "cart_info",
+  "incentive_info": "incentive_info",
+  "payer_info": "payer_info",
+  "shipping_info": "shipping_info",
+  "store_info": "store_info",
+  "transaction_info": "transaction_info"
+ },
+ "reporting_transactions_v1:transaction_detail_list": {
+  "__items__": "transaction_detail"
+ },
+ "reporting_transactions_v1:transaction_info": {
+  "annual_percentage_rate": "percentage",
+  "available_balance": "money",
+  "bank_reference_id": null,
+  "credit_promotional_fee": "money",
+  "credit_term": null,
+  "credit_transactional_fee": "money",
+  "custom_field": null,
+  "discount_amount": "money",
+  "ending_balance": "money",
+  "fee_amount": "money",
+  "instrument_sub_type": null,
+  "instrument_type": null,
+  "insurance_amount": "money",
+  "invoice_id": null,
+  "other_amount": "money",
+  "payment_method_type": null,
+  "payment_tracking_id": null,
+  "paypal_account_id": null,
+  "paypal_reference_id": null,
+  "paypal_reference_id_type": null,
+  "protection_eligibility": null,
+  "sales_tax_amount": "money",
+  "shipping_amount": "money",
+  "shipping_discount_amount": "money",
+  "shipping_tax_amount": "money",
+  "tip_amount": "money",
+  "transaction_amount": "money",
+  "transaction_event_code": null,
+  "transaction_id": null,
+  "transaction_initiation_date": "date_time",
+  "transaction_note": null,
+  "transaction_status": null,
+  "transaction_subject": null,
+  "transaction_updated_date": "date_time"
+ }
+}

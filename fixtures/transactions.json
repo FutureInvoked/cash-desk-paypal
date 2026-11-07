@@ -1,0 +1,1314 @@
+{
+  "transaction_details": [
+    {
+      "transaction_info": {
+        "paypal_account_id": "3F137A370583F",
+        "transaction_id": "848FFC3E8D809BF1E",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-09T14:22:05+0000",
+        "transaction_updated_date": "2026-10-09T14:22:05+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "1250.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-44.12"
+        },
+        "invoice_id": "NW-1001",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "3F137A370583F",
+        "email_address": "dana@harborlane.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Dana",
+          "surname": "Whitfield",
+          "alternate_full_name": "Dana Whitfield"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Brand identity refresh",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "1250.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "1250.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "1250.00"
+            },
+            "invoice_number": "NW-1001"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-E5D6-8AE5-9C4A-F64F"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "CD2FAF1FCB834",
+        "transaction_id": "5349CA6B818A5B93E",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-10T09:41:37+0000",
+        "transaction_updated_date": "2026-10-10T09:41:37+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "860.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-30.50"
+        },
+        "invoice_id": "NW-1002",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "CD2FAF1FCB834",
+        "email_address": "billing@pinecrest-dental.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Omar",
+          "surname": "Reyes",
+          "alternate_full_name": "Omar Reyes"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Website care plan, Q4",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "860.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "860.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "860.00"
+            },
+            "invoice_number": "NW-1002"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-FA24-8E82-FE9F-2504"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "8D682533C53F6",
+        "transaction_id": "B1DF078C6AAED5652",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-11T10:02:55+0000",
+        "transaction_updated_date": "2026-10-11T10:02:55+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "300.00"
+        },
+        "transaction_status": "V",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-10.96"
+        },
+        "invoice_id": "NW-1024",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "8D682533C53F6",
+        "email_address": "priya@junipersage.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Priya",
+          "surname": "Nair",
+          "alternate_full_name": "Priya Nair"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Valentine's promo banner",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "300.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "300.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "300.00"
+            },
+            "invoice_number": "NW-1024"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-F658-A1B9-AAAE-9821"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "8D682533C53F6",
+        "transaction_id": "043FA8F1F7560B254",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-12T17:03:11+0000",
+        "transaction_updated_date": "2026-10-12T17:03:11+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "425.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-15.32"
+        },
+        "invoice_id": "NW-1003",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "8D682533C53F6",
+        "email_address": "priya@junipersage.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Priya",
+          "surname": "Nair",
+          "alternate_full_name": "Priya Nair"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Spring catalogue layout",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "425.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "425.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "425.00"
+            },
+            "invoice_number": "NW-1003"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-0F22-A88C-91F8-391F"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "4470671245C1E",
+        "transaction_id": "1EBF34729829609DA",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-14T11:15:49+0000",
+        "transaction_updated_date": "2026-10-14T11:15:49+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "1980.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-69.59"
+        },
+        "invoice_id": "NW-1004",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "4470671245C1E",
+        "email_address": "leo@brightside.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Leo",
+          "surname": "Martins",
+          "alternate_full_name": "Leo Martins"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Learning portal UI design",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "1980.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "1980.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "1980.00"
+            },
+            "invoice_number": "NW-1004"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-EA04-817F-06AA-3551"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "8D682533C53F6",
+        "transaction_id": "BE03405A39EE75160",
+        "transaction_event_code": "T1107",
+        "transaction_initiation_date": "2026-10-15T09:20:31+0000",
+        "transaction_updated_date": "2026-10-15T09:20:31+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "-300.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "02",
+        "paypal_reference_id": "B1DF078C6AAED5652",
+        "paypal_reference_id_type": "TXN",
+        "invoice_id": "NW-1024",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "8D682533C53F6",
+        "email_address": "priya@junipersage.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Priya",
+          "surname": "Nair",
+          "alternate_full_name": "Priya Nair"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {},
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "5C50139A11EE4",
+        "transaction_id": "03FE54AAC64E6A1BD",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-16T08:58:20+0000",
+        "transaction_updated_date": "2026-10-16T08:58:20+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "640.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-22.83"
+        },
+        "invoice_id": "NW-1005",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "5C50139A11EE4",
+        "email_address": "hana@copperfield.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Hana",
+          "surname": "Sato",
+          "alternate_full_name": "Hana Sato"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Product photo retouching (40 images)",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "640.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "640.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "640.00"
+            },
+            "invoice_number": "NW-1005"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-2F10-D753-C4E8-4AF9"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "828274200636E",
+        "transaction_id": "3D084E2D06E5A98D4",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-19T15:30:02+0000",
+        "transaction_updated_date": "2026-10-19T15:30:02+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "2750.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-96.47"
+        },
+        "invoice_id": "NW-1006",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "828274200636E",
+        "email_address": "accounts@oakmont.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Grace",
+          "surname": "Kim",
+          "alternate_full_name": "Grace Kim"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Listing site redesign, milestone 1",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "2750.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "2750.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "2750.00"
+            },
+            "invoice_number": "NW-1006"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-C106-E840-C884-F67D"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "4623C5D90318A",
+        "transaction_id": "D14B8861D0925D2D6",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-20T13:14:22+0000",
+        "transaction_updated_date": "2026-10-20T13:14:22+0000",
+        "transaction_amount": {
+          "currency_code": "EUR",
+          "value": "900.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "EUR",
+          "value": "-31.80"
+        },
+        "invoice_id": "NW-1022",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "4623C5D90318A",
+        "email_address": "klara@atelier-vogel.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Klara",
+          "surname": "Vogel",
+          "alternate_full_name": "Klara Vogel"
+        },
+        "country_code": "DE"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Exhibition catalogue design",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "EUR",
+              "value": "900.00"
+            },
+            "item_amount": {
+              "currency_code": "EUR",
+              "value": "900.00"
+            },
+            "total_item_amount": {
+              "currency_code": "EUR",
+              "value": "900.00"
+            },
+            "invoice_number": "NW-1022"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-659D-04F4-29F8-0457"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "C87BCE01EDA88",
+        "transaction_id": "82A80D6C09ED86D56",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-21T10:12:44+0000",
+        "transaction_updated_date": "2026-10-21T10:12:44+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "390.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-14.10"
+        },
+        "invoice_id": "NW-1007",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "C87BCE01EDA88",
+        "email_address": "ben@northshore-yoga.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Ben",
+          "surname": "Carter",
+          "alternate_full_name": "Ben Carter"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Class schedule poster series",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "390.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "390.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "390.00"
+            },
+            "invoice_number": "NW-1007"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-048A-C70E-4DDD-90B6"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "828274200636E",
+        "transaction_id": "684DFE3D033F64DB8",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-23T14:10:36+0000",
+        "transaction_updated_date": "2026-10-23T14:10:36+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "600.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-21.43"
+        },
+        "invoice_id": "NW-1013",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "828274200636E",
+        "email_address": "accounts@oakmont.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Grace",
+          "surname": "Kim",
+          "alternate_full_name": "Grace Kim"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Agent headshot session edit",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "600.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "600.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "600.00"
+            },
+            "invoice_number": "NW-1013"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-D256-9A02-708E-398B"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "39B79D2698EED",
+        "transaction_id": "7853CEBF3B9B50BEF",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-24T13:47:31+0000",
+        "transaction_updated_date": "2026-10-24T13:47:31+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "3200.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-112.17"
+        },
+        "invoice_id": "NW-1008",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "39B79D2698EED",
+        "email_address": "finance@redwood-legal.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Sam",
+          "surname": "Ortiz",
+          "alternate_full_name": "Sam Ortiz"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Pitch deck and report templates",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "3200.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "3200.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "3200.00"
+            },
+            "invoice_number": "NW-1008"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-7627-5D09-57F0-F555"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "CD2FAF1FCB834",
+        "transaction_id": "E0B3D0459E765C3C7",
+        "transaction_event_code": "T0000",
+        "transaction_initiation_date": "2026-10-25T09:02:17+0000",
+        "transaction_updated_date": "2026-10-25T09:02:17+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "315.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-11.48"
+        },
+        "transaction_note": "thanks!",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "CD2FAF1FCB834",
+        "email_address": "billing@pinecrest-dental.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Omar",
+          "surname": "Reyes",
+          "alternate_full_name": "Omar Reyes"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {},
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "483EBDFA560EC",
+        "transaction_id": "934B6BF994C1A1552",
+        "transaction_event_code": "T0000",
+        "transaction_initiation_date": "2026-10-26T16:22:48+0000",
+        "transaction_updated_date": "2026-10-26T16:22:48+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "275.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-10.09"
+        },
+        "transaction_subject": "Logo refresh deposit",
+        "transaction_note": "Deposit for the logo refresh we discussed on the call",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "483EBDFA560EC",
+        "email_address": "ravi.menon@example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Ravi",
+          "surname": "Menon",
+          "alternate_full_name": "Ravi Menon"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {},
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "8D682533C53F6",
+        "transaction_id": "6FC0EA11FF213AF9E",
+        "transaction_event_code": "T0000",
+        "transaction_initiation_date": "2026-10-27T10:31:52+0000",
+        "transaction_updated_date": "2026-10-27T10:31:52+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "495.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-17.77"
+        },
+        "transaction_note": "Payment for NW-1014 plus a little extra for the rush, thank you",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "8D682533C53F6",
+        "email_address": "priya@junipersage.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Priya",
+          "surname": "Nair",
+          "alternate_full_name": "Priya Nair"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {},
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "25A3D1E087D23",
+        "transaction_id": "FF13797259FBC9120",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-28T16:05:58+0000",
+        "transaction_updated_date": "2026-10-28T16:05:58+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "720.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-25.62"
+        },
+        "invoice_id": "NW-1009",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "25A3D1E087D23",
+        "email_address": "ana@fieldstone.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Ana",
+          "surname": "Lopez",
+          "alternate_full_name": "Ana Lopez"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Farm stand signage",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "720.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "720.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "720.00"
+            },
+            "invoice_number": "NW-1009"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-26D0-05E7-5EE8-0936"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "4470671245C1E",
+        "transaction_id": "092BA033726F8904B",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-29T19:05:03+0000",
+        "transaction_updated_date": "2026-10-29T19:05:03+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "800.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-28.41"
+        },
+        "invoice_id": "NW-1015",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "4470671245C1E",
+        "email_address": "leo@brightside.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Leo",
+          "surname": "Martins",
+          "alternate_full_name": "Leo Martins"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Tutor onboarding illustrations",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "800.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "800.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "800.00"
+            },
+            "invoice_number": "NW-1015"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-E8F2-6876-3C34-0542"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "4470671245C1E",
+        "transaction_id": "5E9D76CF99B890BE0",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-10-29T19:06:41+0000",
+        "transaction_updated_date": "2026-10-29T19:06:41+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "800.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-28.41"
+        },
+        "invoice_id": "NW-1015",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "4470671245C1E",
+        "email_address": "leo@brightside.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Leo",
+          "surname": "Martins",
+          "alternate_full_name": "Leo Martins"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Tutor onboarding illustrations",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "800.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "800.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "800.00"
+            },
+            "invoice_number": "NW-1015"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-E8F2-6876-3C34-0542"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "7DD190D53BA80",
+        "transaction_id": "E60BEAC3F316EE49A",
+        "transaction_event_code": "T0400",
+        "transaction_initiation_date": "2026-10-30T06:00:00+0000",
+        "transaction_updated_date": "2026-10-30T06:00:00+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "-5000.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "02"
+      },
+      "payer_info": {},
+      "cart_info": {},
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "5C50139A11EE4",
+        "transaction_id": "9A5C708D184B996A0",
+        "transaction_event_code": "T0000",
+        "transaction_initiation_date": "2026-10-30T18:44:09+0000",
+        "transaction_updated_date": "2026-10-30T18:44:09+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "980.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-34.69"
+        },
+        "transaction_subject": "Social kit",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "5C50139A11EE4",
+        "email_address": "hana@copperfield.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Hana",
+          "surname": "Sato",
+          "alternate_full_name": "Hana Sato"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {},
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "C87BCE01EDA88",
+        "transaction_id": "40EF90A02E577BC91",
+        "transaction_event_code": "T0000",
+        "transaction_initiation_date": "2026-10-31T07:55:26+0000",
+        "transaction_updated_date": "2026-10-31T07:55:26+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "482.06"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-17.31"
+        },
+        "transaction_note": "October artwork",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "C87BCE01EDA88",
+        "email_address": "ben@northshore-yoga.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Ben",
+          "surname": "Carter",
+          "alternate_full_name": "Ben Carter"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {},
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "7B045235F1E8B",
+        "transaction_id": "0092FF64160B7CCCA",
+        "transaction_event_code": "T0000",
+        "transaction_initiation_date": "2026-11-01T15:38:10+0000",
+        "transaction_updated_date": "2026-11-01T15:38:10+0000",
+        "transaction_amount": {
+          "currency_code": "EUR",
+          "value": "920.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "EUR",
+          "value": "-32.50"
+        },
+        "transaction_note": "Maison Durand NW-1023",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "7B045235F1E8B",
+        "email_address": "luc@maison-durand.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Luc",
+          "surname": "Durand",
+          "alternate_full_name": "Luc Durand"
+        },
+        "country_code": "FR"
+      },
+      "cart_info": {},
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "B584B6F65BF4B",
+        "transaction_id": "BEEFC4499C8309BD0",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-11-02T12:20:13+0000",
+        "transaction_updated_date": "2026-11-02T12:20:13+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "1100.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-38.88"
+        },
+        "invoice_id": "NW-1010",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "B584B6F65BF4B",
+        "email_address": "jon@tidewater.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Jon",
+          "surname": "Park",
+          "alternate_full_name": "Jon Park"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Booking flow UX audit",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "1100.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "1100.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "1100.00"
+            },
+            "invoice_number": "NW-1010"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-FF7A-E3D5-0CAF-B0DA"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "744072768E992",
+        "transaction_id": "A878C16AB129834C9",
+        "transaction_event_code": "T0000",
+        "transaction_initiation_date": "2026-11-03T08:27:40+0000",
+        "transaction_updated_date": "2026-11-03T08:27:40+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "1500.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-52.84"
+        },
+        "transaction_note": "Lumen Bakery - October website retainer",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "744072768E992",
+        "email_address": "maria.lumen@example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Maria",
+          "surname": "Lumen",
+          "alternate_full_name": "Maria Lumen"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {},
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "99EFFB142DE38",
+        "transaction_id": "6DDAAD0BD05B87560",
+        "transaction_event_code": "T0000",
+        "transaction_initiation_date": "2026-11-04T20:11:05+0000",
+        "transaction_updated_date": "2026-11-04T20:11:05+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "49.00"
+        },
+        "transaction_status": "S",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-2.20"
+        },
+        "transaction_subject": "Stock photo license",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "99EFFB142DE38",
+        "email_address": "ella.brooks@example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Ella",
+          "surname": "Brooks",
+          "alternate_full_name": "Ella Brooks"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {},
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    },
+    {
+      "transaction_info": {
+        "paypal_account_id": "828274200636E",
+        "transaction_id": "D26CF1D282F39AE1E",
+        "transaction_event_code": "T0006",
+        "transaction_initiation_date": "2026-11-05T11:48:19+0000",
+        "transaction_updated_date": "2026-11-05T11:48:19+0000",
+        "transaction_amount": {
+          "currency_code": "USD",
+          "value": "650.00"
+        },
+        "transaction_status": "P",
+        "protection_eligibility": "01",
+        "fee_amount": {
+          "currency_code": "USD",
+          "value": "-23.18"
+        },
+        "invoice_id": "NW-1025",
+        "instrument_type": "PAYPAL"
+      },
+      "payer_info": {
+        "account_id": "828274200636E",
+        "email_address": "accounts@oakmont.example.com",
+        "address_status": "Y",
+        "payer_status": "Y",
+        "payer_name": {
+          "given_name": "Grace",
+          "surname": "Kim",
+          "alternate_full_name": "Grace Kim"
+        },
+        "country_code": "US"
+      },
+      "cart_info": {
+        "item_details": [
+          {
+            "item_name": "Open house flyer pack",
+            "item_quantity": "1",
+            "item_unit_price": {
+              "currency_code": "USD",
+              "value": "650.00"
+            },
+            "item_amount": {
+              "currency_code": "USD",
+              "value": "650.00"
+            },
+            "total_item_amount": {
+              "currency_code": "USD",
+              "value": "650.00"
+            },
+            "invoice_number": "NW-1025"
+          }
+        ],
+        "tax_inclusive": false,
+        "paypal_invoice_id": "INV2-FFB9-B624-1F01-2365"
+      },
+      "store_info": {},
+      "auction_info": {},
+      "incentive_info": {}
+    }
+  ],
+  "account_number": "NWSTUDIO8Q2LK",
+  "start_date": "2026-10-08T00:00:00+0000",
+  "end_date": "2026-11-07T00:00:00+0000",
+  "last_refreshed_datetime": "2026-11-06T23:59:59+0000",
+  "page": 1,
+  "total_items": 26,
+  "total_pages": 1,
+  "links": [
+    {
+      "href": "https://api-m.sandbox.paypal.com/v1/reporting/transactions?start_date=2026-10-08T00:00:00+0000&end_date=2026-11-07T00:00:00+0000&fields=all&page_size=100&page=1",
+      "rel": "self",
+      "method": "GET"
+    }
+  ]
+}
