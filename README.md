@@ -139,8 +139,10 @@ field for field, and a test walks every key.
 
 ## Run it against the PayPal sandbox
 
-1. Sign in at <https://developer.paypal.com>, open **Apps & Credentials** (Sandbox), and create a REST app.
-2. In the app's settings, enable **Transaction search**. Without it the token lacks the reporting scope.
+1. Sign in at <https://developer.paypal.com>, open **Apps & Credentials** (Sandbox), and use the
+   classic REST app: the **Default Application**, or any app whose client ID starts with `A`.
+   Newer app types (client ID starting with `B`) were not granted Invoicing or Transaction Search in our tests.
+2. In the app's settings, enable **Invoicing** and **Transaction search**. Without them the token lacks those scopes, and Cash Desk says so.
 3. Copy `.env.example` to `.env` and fill in `PAYPAL_CLIENT_ID=` and `PAYPAL_CLIENT_SECRET=`.
    `.env` is gitignored, so never commit it.
 4. Run `make demo`. With keys present the mode defaults to `PAYPAL_MODE=sandbox`. Force sample data
