@@ -53,3 +53,22 @@ and fixture invoices parse the same way. Findings:
 
 Pending. This needs the owner's sandbox payments (see `docs/sandbox-pay-steps.md`, which is generated
 and gitignored). Once those are in, Transaction Search can take up to about 3 hours to report them.
+
+## S4b: Transaction Search parity (2026-11-08 00:5x CET)
+
+Recorded one real `GET /v1/reporting/transactions?fields=all` page (3-day window) into
+`fixtures/sandbox-recorded/transactions_page.json`, with the personal details scrubbed (emails,
+names, address, phone and account ids). Tests in `tests/test_parity.py`.
+
+- Every field the parser reads exists in the real `T0006` payment row. The row parses to the same
+  types as a sample payment: Decimal amounts, a negative fee in the same currency, and the invoice
+  reference, PayPal invoice id and item name all filled in.
+- **Real finding: currency conversion rows.** The sandbox business account's primary currency is CZK.
+  PayPal therefore books each USD payment as one `T0006` row plus two `T0200` conversion rows (USD out,
+  CZK in), and the conversion rows repeat the `invoice_id`. The matcher counts only `T00xx` rows with a
+  positive gross as payments, so the conversion rows are `ignored`. Invoice 0011 stays one clean match,
+  with no fake duplicate or overpayment (tested).
+- **Real fees:** 4.55 on 125.00 USD and 3.22 on 86.00 USD. Both are below the standard-rate ceiling
+  (3.49% + 0.49) that the fee-short rule uses, so a payer who deducts the real fee is still caught (tested).
+- **Lag:** `last_refreshed_datetime` was 21:59:59Z when queried at 23:4xZ. Invoice payments made later
+  were already on the board through the Invoicing second source; the Send Money payments were not yet visible.

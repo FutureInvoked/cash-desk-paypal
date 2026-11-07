@@ -78,3 +78,75 @@ def test_real_unpaid_invoice_parses_like_a_fixture_open_invoice():
     assert real.status == "SENT" and real.paid == Money(Decimal("0"), "USD")
     assert real.due == real.total == Money(Decimal("240.00"), "USD")
     assert real.due_date is not None and real.payment_ids == []
+
+
+# ---------------------------------------------------------------- S4b: Transaction Search
+from cashdesk.matcher import match, paypal_fee  # noqa: E402
+from cashdesk.paypal.parse import parse_transaction  # noqa: E402
+
+TXN_FIX = json.loads((ROOT / "fixtures" / "transactions.json").read_text())["transaction_details"]
+READ_PATHS_TXN = ["transaction_info.transaction_id", "transaction_info.transaction_event_code",
+                  "transaction_info.transaction_status", "transaction_info.transaction_initiation_date",
+                  "transaction_info.transaction_amount.value", "transaction_info.transaction_amount.currency_code",
+                  "transaction_info.fee_amount.value", "transaction_info.invoice_id",
+                  "payer_info.email_address", "payer_info.payer_name.given_name",
+                  "cart_info.paypal_invoice_id", "cart_info.item_details.0.item_name"]
+
+
+def real_rows():
+    return rec("transactions_page")["transaction_details"]
+
+
+def test_real_transaction_page_has_the_envelope_the_client_pages_through():
+    page = rec("transactions_page")
+    for k in ("transaction_details", "total_pages", "page", "last_refreshed_datetime"):
+        assert k in page
+
+
+def test_every_field_we_read_exists_in_the_real_payment_row():
+    pay = next(t for t in real_rows() if t["transaction_info"]["transaction_event_code"] == "T0006")
+    missing = []
+    for path in READ_PATHS_TXN:
+        try:
+            dig(pay, path)
+        except (KeyError, IndexError, TypeError):
+            missing.append(path)
+    assert not missing, missing
+
+
+def test_real_payment_row_parses_like_a_fixture_payment_row():
+    real = parse_transaction(next(t for t in real_rows() if t["transaction_info"]["invoice_id"] == "0011"
+                                  and t["transaction_info"]["transaction_event_code"] == "T0006"))
+    fix = parse_transaction(next(t for t in TXN_FIX if t["transaction_info"]["transaction_event_code"] == "T0006"))
+    for t in (real, fix):
+        assert isinstance(t.amount.amount, Decimal) and t.amount.amount > 0
+        assert t.fee is not None and t.fee.amount < 0 and t.fee.currency == t.amount.currency
+        assert t.status == "S" and t.initiated is not None
+    assert real.amount == Money(Decimal("125.00"), "USD") and real.invoice_ref == "0011"
+    assert real.paypal_invoice_id and real.paypal_invoice_id.startswith("INV2-")
+    assert real.payer_email == "buyer@personal.example.com" and real.items == ("Menu board redesign",)
+
+
+def test_real_currency_conversion_rows_carry_the_invoice_id_but_are_ignored():
+    # Real finding: the business account's primary currency is CZK, so PayPal books each USD payment
+    # as T0006 plus two T0200 conversion rows, and the conversion rows repeat invoice_id. They must not
+    # count as payments (no fake duplicate/overpaid on 0011).
+    rows = [parse_transaction(t) for t in real_rows()]
+    conv = [t for t in rows if t.event_code == "T0200"]
+    assert conv and all(t.invoice_ref for t in conv)
+    inv = parse_invoice(rec("invoice_paid"))
+    r = match([inv], [t for t in rows if t.invoice_ref == "0011"], as_of=date(2026, 11, 8))
+    outcomes = sorted(x.outcome for x in r.transactions)
+    assert outcomes == ["ignored", "ignored", "matched"], outcomes
+    assert r.invoice_by_number("0011").outcome == "paid"
+
+
+def test_real_fees_stay_under_the_fee_tolerance_ceiling():
+    # The fee-short rule allows a shortfall up to the standard fee + slack. Real sandbox fees were lower
+    # (4.55 on 125.00, 3.22 on 86.00), so a payer who deducts the real fee still falls inside the rule.
+    for t in real_rows():
+        ti = t["transaction_info"]
+        if ti["transaction_event_code"] != "T0006":
+            continue
+        p = parse_transaction(t)
+        assert -p.fee.amount <= paypal_fee(p.amount).amount

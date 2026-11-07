@@ -1,0 +1,380 @@
+{
+ "transaction_details": [
+  {
+   "transaction_info": {
+    "paypal_account_id": "REDACTED",
+    "transaction_id": "3WY06483B5792335X",
+    "paypal_reference_id": "3H3409488E167293L",
+    "paypal_reference_id_type": "TXN",
+    "transaction_event_code": "T0006",
+    "transaction_initiation_date": "2026-11-07T09:15:15Z",
+    "transaction_updated_date": "2026-11-07T09:15:15Z",
+    "transaction_amount": {
+     "currency_code": "USD",
+     "value": "125.00"
+    },
+    "fee_amount": {
+     "currency_code": "USD",
+     "value": "-4.55"
+    },
+    "transaction_status": "S",
+    "ending_balance": {
+     "currency_code": "USD",
+     "value": "120.45"
+    },
+    "available_balance": {
+     "currency_code": "USD",
+     "value": "120.45"
+    },
+    "invoice_id": "0011",
+    "protection_eligibility": "01",
+    "instrument_type": "PayPal",
+    "instrument_sub_type": "PayPal Wallet"
+   },
+   "payer_info": {
+    "account_id": "REDACTED",
+    "email_address": "buyer@personal.example.com",
+    "phone_number": {
+     "country_code": "420",
+     "national_number": "REDACTED"
+    },
+    "address_status": "Y",
+    "payer_status": "Y",
+    "payer_name": {
+     "given_name": "Sandbox",
+     "surname": "Buyer",
+     "alternate_full_name": "Sandbox Buyer"
+    },
+    "country_code": "CZ"
+   },
+   "shipping_info": {
+    "name": "Sandbox Buyer",
+    "address": {
+     "line1": "REDACTED",
+     "city": "REDACTED",
+     "state": "REDACTED",
+     "country_code": "CZ",
+     "postal_code": "REDACTED"
+    }
+   },
+   "cart_info": {
+    "item_details": [
+     {
+      "item_name": "Menu board redesign",
+      "item_description": "Menu board redesign",
+      "item_quantity": "1",
+      "item_unit_price": {
+       "currency_code": "USD",
+       "value": "125.00"
+      },
+      "item_amount": {
+       "currency_code": "USD",
+       "value": "125.00"
+      },
+      "total_item_amount": {
+       "currency_code": "USD",
+       "value": "125.00"
+      },
+      "invoice_number": "0011"
+     }
+    ],
+    "paypal_invoice_id": "INV2-R22F-Y42E-SN77-EVEH"
+   },
+   "store_info": {},
+   "auction_info": {},
+   "incentive_info": {}
+  },
+  {
+   "transaction_info": {
+    "transaction_id": "73552906CJ221964W",
+    "paypal_reference_id": "3WY06483B5792335X",
+    "paypal_reference_id_type": "TXN",
+    "transaction_event_code": "T0200",
+    "transaction_initiation_date": "2026-11-07T09:15:15Z",
+    "transaction_updated_date": "2026-11-07T09:15:15Z",
+    "transaction_amount": {
+     "currency_code": "USD",
+     "value": "-120.45"
+    },
+    "transaction_status": "S",
+    "ending_balance": {
+     "currency_code": "USD",
+     "value": "0.00"
+    },
+    "available_balance": {
+     "currency_code": "USD",
+     "value": "0.00"
+    },
+    "invoice_id": "0011",
+    "protection_eligibility": "02",
+    "instrument_type": "PayPal",
+    "instrument_sub_type": "PayPal Wallet"
+   },
+   "payer_info": {
+    "phone_number": {
+     "country_code": "420",
+     "national_number": "REDACTED"
+    },
+    "address_status": "N",
+    "payer_name": {}
+   },
+   "shipping_info": {},
+   "cart_info": {
+    "item_details": [
+     {
+      "item_name": "Menu board redesign",
+      "item_description": "Menu board redesign",
+      "item_quantity": "1",
+      "invoice_number": "0011"
+     }
+    ],
+    "paypal_invoice_id": "INV2-R22F-Y42E-SN77-EVEH"
+   },
+   "store_info": {},
+   "auction_info": {},
+   "incentive_info": {}
+  },
+  {
+   "transaction_info": {
+    "transaction_id": "98K09663N9795974T",
+    "paypal_reference_id": "3WY06483B5792335X",
+    "paypal_reference_id_type": "TXN",
+    "transaction_event_code": "T0200",
+    "transaction_initiation_date": "2026-11-07T09:15:15Z",
+    "transaction_updated_date": "2026-11-07T09:15:15Z",
+    "transaction_amount": {
+     "currency_code": "CZK",
+     "value": "2545.61"
+    },
+    "transaction_status": "S",
+    "ending_balance": {
+     "currency_code": "CZK",
+     "value": "7545.61"
+    },
+    "available_balance": {
+     "currency_code": "CZK",
+     "value": "7545.61"
+    },
+    "invoice_id": "0011",
+    "protection_eligibility": "02",
+    "instrument_type": "PayPal",
+    "instrument_sub_type": "PayPal Wallet"
+   },
+   "payer_info": {
+    "phone_number": {
+     "country_code": "420",
+     "national_number": "REDACTED"
+    },
+    "address_status": "N",
+    "payer_name": {}
+   },
+   "shipping_info": {},
+   "cart_info": {
+    "item_details": [
+     {
+      "item_name": "Menu board redesign",
+      "item_description": "Menu board redesign",
+      "item_quantity": "1",
+      "invoice_number": "0011"
+     }
+    ],
+    "paypal_invoice_id": "INV2-R22F-Y42E-SN77-EVEH"
+   },
+   "store_info": {},
+   "auction_info": {},
+   "incentive_info": {}
+  },
+  {
+   "transaction_info": {
+    "paypal_account_id": "REDACTED",
+    "transaction_id": "1B083312EX7642809",
+    "paypal_reference_id": "9BE32567UY695104B",
+    "paypal_reference_id_type": "TXN",
+    "transaction_event_code": "T0006",
+    "transaction_initiation_date": "2026-11-07T09:16:00Z",
+    "transaction_updated_date": "2026-11-07T09:16:00Z",
+    "transaction_amount": {
+     "currency_code": "USD",
+     "value": "86.00"
+    },
+    "fee_amount": {
+     "currency_code": "USD",
+     "value": "-3.22"
+    },
+    "transaction_status": "S",
+    "ending_balance": {
+     "currency_code": "USD",
+     "value": "82.78"
+    },
+    "available_balance": {
+     "currency_code": "USD",
+     "value": "82.78"
+    },
+    "invoice_id": "0012",
+    "protection_eligibility": "01",
+    "instrument_type": "Debit Card",
+    "instrument_sub_type": "Visa"
+   },
+   "payer_info": {
+    "account_id": "REDACTED",
+    "email_address": "buyer@personal.example.com",
+    "phone_number": {
+     "country_code": "420",
+     "national_number": "REDACTED"
+    },
+    "address_status": "Y",
+    "payer_status": "Y",
+    "payer_name": {
+     "given_name": "Sandbox",
+     "surname": "Buyer",
+     "alternate_full_name": "Sandbox Buyer"
+    },
+    "country_code": "CZ"
+   },
+   "shipping_info": {
+    "name": "Sandbox Buyer",
+    "address": {
+     "line1": "REDACTED",
+     "city": "REDACTED",
+     "state": "REDACTED",
+     "country_code": "CZ",
+     "postal_code": "REDACTED"
+    }
+   },
+   "cart_info": {
+    "item_details": [
+     {
+      "item_name": "Appointment cards",
+      "item_description": "Appointment cards",
+      "item_quantity": "1",
+      "item_unit_price": {
+       "currency_code": "USD",
+       "value": "86.00"
+      },
+      "item_amount": {
+       "currency_code": "USD",
+       "value": "86.00"
+      },
+      "total_item_amount": {
+       "currency_code": "USD",
+       "value": "86.00"
+      },
+      "invoice_number": "0012"
+     }
+    ],
+    "paypal_invoice_id": "INV2-AV8Z-BQQP-4UJM-GFHZ"
+   },
+   "store_info": {},
+   "auction_info": {},
+   "incentive_info": {}
+  },
+  {
+   "transaction_info": {
+    "transaction_id": "88B246159Y954970A",
+    "paypal_reference_id": "1B083312EX7642809",
+    "paypal_reference_id_type": "TXN",
+    "transaction_event_code": "T0200",
+    "transaction_initiation_date": "2026-11-07T09:16:00Z",
+    "transaction_updated_date": "2026-11-07T09:16:00Z",
+    "transaction_amount": {
+     "currency_code": "USD",
+     "value": "-82.78"
+    },
+    "transaction_status": "S",
+    "ending_balance": {
+     "currency_code": "USD",
+     "value": "0.00"
+    },
+    "available_balance": {
+     "currency_code": "USD",
+     "value": "0.00"
+    },
+    "invoice_id": "0012",
+    "protection_eligibility": "02",
+    "instrument_type": "PayPal",
+    "instrument_sub_type": "PayPal Wallet"
+   },
+   "payer_info": {
+    "phone_number": {
+     "country_code": "420",
+     "national_number": "REDACTED"
+    },
+    "address_status": "N",
+    "payer_name": {}
+   },
+   "shipping_info": {},
+   "cart_info": {
+    "item_details": [
+     {
+      "item_name": "Appointment cards",
+      "item_description": "Appointment cards",
+      "item_quantity": "1",
+      "invoice_number": "0012"
+     }
+    ],
+    "paypal_invoice_id": "INV2-AV8Z-BQQP-4UJM-GFHZ"
+   },
+   "store_info": {},
+   "auction_info": {},
+   "incentive_info": {}
+  },
+  {
+   "transaction_info": {
+    "transaction_id": "4XJ05373LE6149001",
+    "paypal_reference_id": "1B083312EX7642809",
+    "paypal_reference_id_type": "TXN",
+    "transaction_event_code": "T0200",
+    "transaction_initiation_date": "2026-11-07T09:16:00Z",
+    "transaction_updated_date": "2026-11-07T09:16:00Z",
+    "transaction_amount": {
+     "currency_code": "CZK",
+     "value": "1749.49"
+    },
+    "transaction_status": "S",
+    "ending_balance": {
+     "currency_code": "CZK",
+     "value": "9295.10"
+    },
+    "available_balance": {
+     "currency_code": "CZK",
+     "value": "9295.10"
+    },
+    "invoice_id": "0012",
+    "protection_eligibility": "02",
+    "instrument_type": "PayPal",
+    "instrument_sub_type": "PayPal Wallet"
+   },
+   "payer_info": {
+    "phone_number": {
+     "country_code": "420",
+     "national_number": "REDACTED"
+    },
+    "address_status": "N",
+    "payer_name": {}
+   },
+   "shipping_info": {},
+   "cart_info": {
+    "item_details": [
+     {
+      "item_name": "Appointment cards",
+      "item_description": "Appointment cards",
+      "item_quantity": "1",
+      "invoice_number": "0012"
+     }
+    ],
+    "paypal_invoice_id": "INV2-AV8Z-BQQP-4UJM-GFHZ"
+   },
+   "store_info": {},
+   "auction_info": {},
+   "incentive_info": {}
+  }
+ ],
+ "account_number": "REDACTED",
+ "start_date": "2026-11-04T23:46:56Z",
+ "end_date": "2026-11-07T21:59:59Z",
+ "last_refreshed_datetime": "2026-11-07T21:59:59Z",
+ "page": 1,
+ "total_items": 6,
+ "total_pages": 1,
+ "links": []
+}
