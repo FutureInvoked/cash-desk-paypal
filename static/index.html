@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cash Desk for PayPal</title>
+</head>
+<body>
+  <h1>Cash Desk for PayPal</h1>
+  <p id="health">Loading…</p>
+  <script>
+    fetch('/api/health').then(r => r.json()).then(h => {
+      document.getElementById('health').textContent = `Mode: ${h.paypal_mode} · v${h.version}`;
+    }).catch(() => { document.getElementById('health').textContent = 'Backend unreachable'; });
+  </script>
+</body>
+</html>
