@@ -39,3 +39,38 @@ def test_sandbox_status_is_honest_until_s3():
 def test_length_is_reasonable():
     words = len(TEXT.split())
     assert 500 <= words <= 1600, words
+
+
+SCRIPT = (ROOT / "submission" / "video-script.md").read_text() if (ROOT / "submission" / "video-script.md").exists() else ""
+
+
+def _beats():
+    # rows like: | 0:00-0:12 | ... |
+    out = []
+    for a, b in re.findall(r"^\|\s*(\d+:\d\d)\s*[-–]\s*(\d+:\d\d)\s*\|", SCRIPT, re.M):
+        s = lambda t: int(t.split(":")[0]) * 60 + int(t.split(":")[1])
+        out.append((s(a), s(b)))
+    return out
+
+
+def test_video_runs_under_three_minutes_with_contiguous_beats():
+    beats = _beats()
+    assert len(beats) >= 7
+    assert beats[0][0] == 0
+    for (a1, b1), (a2, b2) in zip(beats, beats[1:]):
+        assert b1 == a2 and a1 < b1
+    assert beats[-1][1] <= 170  # 2:50, leaves margin under the 3:00 limit
+
+
+def test_voiceover_fits_the_time():
+    # ~150 words a minute spoken at a calm pace
+    vo = " ".join(re.findall(r"^> (.+)$", SCRIPT, re.M))
+    assert vo and len(vo.split()) <= 150 * _beats()[-1][1] / 60
+
+
+def test_shots_show_the_judged_things():
+    low = SCRIPT.lower()
+    for s in ("reconciliation", "evidence", "propose actions", "approve", "api-m.sandbox.paypal.com",
+              "paypal-request-id", "audit", "make demo", "ag grid community", "claude"):
+        assert s in low, s
+    assert "logo" not in low
