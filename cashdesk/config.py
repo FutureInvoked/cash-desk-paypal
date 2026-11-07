@@ -31,11 +31,41 @@ class Settings:
     fixtures_dir: Path
 
 
+def load_dotenv(path: Path | None = None) -> list[str]:
+    """Load KEY=VALUE lines from repo/.env into os.environ without overriding real env vars.
+
+    Returns the names it set (never the values). No dependency; comments and malformed
+    lines are skipped. Tests set CASHDESK_NO_DOTENV=1 so a developer's keys never leak in.
+    """
+    path = Path(path or REPO_ROOT / ".env")
+    if not path.is_file():
+        return []
+    loaded = []
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
+        if not key.replace("_", "").isalnum() or " " in key:
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        if key not in os.environ:
+            os.environ[key] = value
+            loaded.append(key)
+    return loaded
+
+
 def _has_keys() -> bool:
     return bool(os.environ.get("PAYPAL_CLIENT_ID")) and bool(os.environ.get("PAYPAL_CLIENT_SECRET"))
 
 
 def load_settings() -> Settings:
+    if not os.environ.get("CASHDESK_NO_DOTENV"):
+        load_dotenv()
     mode = os.environ.get("PAYPAL_MODE") or ("sandbox" if _has_keys() else "fixtures")
     if mode not in {"fixtures", "sandbox"}:
         raise ValueError(f"PAYPAL_MODE must be 'fixtures' or 'sandbox', got {mode!r}")

@@ -11,7 +11,8 @@ def make_client() -> PayPalClient:
     settings = load_settings()
     if settings.paypal_mode == "fixtures":
         return FixturePayPalClient(settings.fixtures_dir)
-    raise NotImplementedError("sandbox mode arrives with backlog item S1")
+    from .sandbox import SandboxPayPalClient
+    return SandboxPayPalClient.from_env()
 
 
 __all__ = ["PayPalClient", "FixturePayPalClient", "make_client"]
