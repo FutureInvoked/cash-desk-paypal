@@ -1,17 +1,307 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cash Desk for PayPal</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cash Desk for PayPal</title>
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@36.2.0/dist/ag-grid-community.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f0f2f5; --text: #17202a; --muted: #5d6b7a;
+    --border: #dfe3e8; --accent: #2457c5; --accent-text: #ffffff;
+    --ok: #1f7a4d; --ok-bg: #e3f4ea; --warn: #8a5a00; --warn-bg: #fdf1d6;
+    --bad: #b42318; --bad-bg: #fde7e5; --info: #2457c5; --info-bg: #e5edfb; --neutral: #4a5563; --neutral-bg: #eceff3;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f141a; --surface: #161d25; --surface-2: #1d2630; --text: #e6ebf0; --muted: #98a6b5;
+      --border: #2a3542; --accent: #7aa2ff; --accent-text: #0f141a;
+      --ok: #6fd3a0; --ok-bg: #163527; --warn: #f2c66d; --warn-bg: #3a2d10;
+      --bad: #ff8f85; --bad-bg: #3d1a17; --info: #8fb2ff; --info-bg: #19284a; --neutral: #b7c2ce; --neutral-bg: #26303b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+           padding: 14px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; }
+  .badge { padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); }
+  button { font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid var(--border);
+           background: var(--surface); color: var(--text); padding: 6px 12px; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  nav.tabs { display: flex; gap: 4px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  nav.tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 12px; background: none; color: var(--muted); }
+  nav.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  main { padding: 16px 20px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .toolbar input[type=search] { flex: 1 1 240px; max-width: 360px; padding: 6px 10px; border-radius: 6px;
+           border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
+  .toolbar label { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; padding: 3px 9px; }
+  .chip[aria-pressed="true"] { outline: 2px solid var(--accent); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 0; gap: 0; }
+  .layout.open { grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; }
+  #grid { height: calc(100vh - 230px); min-height: 420px; }
+  aside#detail { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px;
+                 overflow: auto; height: calc(100vh - 230px); min-height: 420px; display: none; }
+  .layout.open aside#detail { display: block; }
+  aside h2 { font-size: 15px; margin: 0 0 6px; }
+  aside dl { margin: 10px 0; font-size: 12px; }
+  aside dt { color: var(--muted); font-family: var(--mono); font-size: 11px; margin-top: 8px; }
+  aside dd { margin: 2px 0 0; word-break: break-word; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 18px; white-space: nowrap; }
+  .tone-ok { color: var(--ok); background: var(--ok-bg); }
+  .tone-warn { color: var(--warn); background: var(--warn-bg); }
+  .tone-bad { color: var(--bad); background: var(--bad-bg); }
+  .tone-info { color: var(--info); background: var(--info-bg); }
+  .tone-neutral { color: var(--neutral); background: var(--neutral-bg); }
+  #grid .ag-cell-wrap-text { line-height: 1.4; padding-top: 8px; padding-bottom: 8px; word-break: normal; }
+  #grid .ag-cell .sub { line-height: 1.3; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .group-row { display: flex; align-items: center; gap: 10px; height: 100%; padding: 0 12px; cursor: pointer;
+               background: var(--surface-2); font-weight: 600; user-select: none; }
+  .group-row .count { color: var(--muted); font-weight: 400; }
+  .row-exception { box-shadow: inset 3px 0 0 var(--bad); }
+  .row-attention { box-shadow: inset 3px 0 0 var(--warn); }
+  .state { padding: 40px; text-align: center; color: var(--muted); }
+  .panel { display: none; } .panel.active { display: block; }
+  @media (max-width: 900px) { .layout.open { grid-template-columns: minmax(0,1fr); } aside#detail { height: auto; } }
+</style>
 </head>
 <body>
-  <h1>Cash Desk for PayPal</h1>
-  <p id="health">Loading…</p>
-  <script>
-    fetch('/api/health').then(r => r.json()).then(h => {
-      document.getElementById('health').textContent = `Mode: ${h.paypal_mode} · v${h.version}`;
-    }).catch(() => { document.getElementById('health').textContent = 'Backend unreachable'; });
-  </script>
+<header>
+  <div>
+    <h1>Cash Desk for PayPal</h1>
+    <div class="meta">
+      <span class="badge" id="mode">mode: …</span>
+      <span class="badge" id="asof">as of …</span>
+      <span class="badge" id="ai">AI: …</span>
+    </div>
+  </div>
+  <button class="primary" id="sync">Re-sync PayPal</button>
+</header>
+<nav class="tabs" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="recon">Reconciliation</button>
+  <button role="tab" aria-selected="false" data-tab="approvals">Approvals</button>
+  <button role="tab" aria-selected="false" data-tab="audit">Audit log</button>
+</nav>
+<main>
+  <section class="panel active" id="panel-recon">
+    <div class="toolbar">
+      <input type="search" id="search" placeholder="Search payer, invoice, reason…" aria-label="Search">
+      <label><input type="checkbox" id="exceptions-only"> Exceptions only</label>
+      <div class="chips" id="chips" aria-label="Filter by status"></div>
+    </div>
+    <div class="layout" id="layout">
+      <div id="grid" role="region" aria-label="Reconciliation grid"></div>
+      <aside id="detail" aria-live="polite"></aside>
+    </div>
+  </section>
+  <section class="panel" id="panel-approvals"><div class="state">Approvals arrive in the next build step.</div></section>
+  <section class="panel" id="panel-audit"><div class="state">The audit log arrives in the next build step.</div></section>
+</main>
+<script>
+"use strict";
+// ---------- status metadata (severity order drives the grouping) ----------
+const STATUS = {
+  duplicate:         { label: "Duplicate",         tone: "bad",     exception: true },
+  overpaid:          { label: "Overpaid",          tone: "warn",    exception: true },
+  partial:           { label: "Partial",           tone: "warn",    exception: true },
+  fee_mismatch:      { label: "Fee short",         tone: "warn",    exception: true },
+  currency_mismatch: { label: "Currency mismatch", tone: "bad",     exception: true },
+  unmatched:         { label: "Unmatched",         tone: "bad",     exception: true },
+  overdue:           { label: "Overdue",           tone: "bad",     exception: true },
+  suggested:         { label: "Suggested match",   tone: "info",    exception: true },
+  pending:           { label: "Pending",           tone: "neutral", exception: false },
+  refunded:          { label: "Refunded",          tone: "neutral", exception: false },
+  refund:            { label: "Refund",            tone: "neutral", exception: false },
+  matched:           { label: "Matched",           tone: "ok",      exception: false },
+  open:              { label: "Open",              tone: "neutral", exception: false },
+  draft:             { label: "Draft",             tone: "neutral", exception: false },
+  ignored:           { label: "Not a sale",        tone: "neutral", exception: false },
+};
+const ORDER = Object.keys(STATUS);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = m => m ? `${Number(m.value).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${m.currency}` : "";
+const pill = st => { const s = STATUS[st] || { label: st, tone: "neutral" }; return `<span class="pill tone-${s.tone}">${esc(s.label)}</span>`; };
+
+// ---------- state ----------
+let data = null, gridApi = null;
+const collapsed = new Set(["matched", "ignored", "refund", "draft", "open"]);
+let statusFilter = null;
+
+function rowsFrom(body) {
+  const rows = body.transactions.map(t => ({
+    kind: "payment", id: t.txn_id,
+    outcome: (t.outcome === "matched" && (t.rule === "ai" || t.rule === "memo_heuristic")) ? "suggested" : t.outcome,
+    date: t.date, invoice_number: t.invoice_number || "", payer: t.payer_name || (t.payer_email ? "" : "PayPal (bank)"),
+    payer_email: t.payer_email || "", amount: t.amount, fee: t.fee, difference: t.difference,
+    reason: t.reason, reason_source: t.reason_source, rule: t.rule, confidence: t.confidence,
+    needs_review: t.needs_review, evidence: t.evidence, candidates: t.candidates, raw: t,
+  }));
+  // invoices with nothing paid against them still need a row (overdue / open / draft)
+  for (const i of body.invoices) {
+    if (i.transactions.length || !["overdue", "open", "draft"].includes(i.outcome)) continue;
+    rows.push({ kind: "invoice", id: i.invoice_number, outcome: i.outcome, date: i.due_date || "",
+      invoice_number: i.invoice_number, payer: i.customer || "", payer_email: i.recipient_email || "",
+      amount: i.outstanding, fee: null, difference: null, reason: i.reason, reason_source: i.reason_source,
+      rule: null, confidence: null, evidence: { "invoice.detail.invoice_number": i.invoice_number,
+      "invoice.detail.payment_term.due_date": i.due_date, "invoice.due_amount": money(i.outstanding),
+      "days_overdue": i.days_overdue }, raw: i });
+  }
+  return rows;
+}
+
+// Community-only grouping: we build the group header rows ourselves (full-width rows) and
+// collapse groups with the grid's external filter.
+function groupedRows(rows) {
+  const out = [];
+  for (const st of ORDER) {
+    const members = rows.filter(r => r.outcome === st).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    if (!members.length) continue;
+    out.push({ kind: "group", id: "group:" + st, outcome: st, count: members.length });
+    for (const r of members) out.push({ ...r, group: st });
+  }
+  return out;
+}
+
+function renderChips(rows) {
+  const counts = {};
+  rows.forEach(r => counts[r.outcome] = (counts[r.outcome] || 0) + 1);
+  const el = document.getElementById("chips");
+  el.innerHTML = ORDER.filter(s => counts[s]).map(s =>
+    `<button class="chip pill tone-${STATUS[s].tone}" data-status="${s}" aria-pressed="${statusFilter === s}">${esc(STATUS[s].label)} ${counts[s]}</button>`
+  ).join("");
+  el.querySelectorAll("button").forEach(b => b.onclick = () => {
+    statusFilter = statusFilter === b.dataset.status ? null : b.dataset.status;
+    if (statusFilter) collapsed.delete(statusFilter);
+    renderChips(rows); gridApi.onFilterChanged();
+  });
+}
+
+function GroupRenderer() {}
+GroupRenderer.prototype.init = function (p) {
+  const st = p.data.outcome, open = !collapsed.has(st);
+  this.e = document.createElement("div");
+  this.e.className = "group-row";
+  this.e.setAttribute("role", "button");
+  this.e.setAttribute("aria-expanded", String(open));
+  this.e.innerHTML = `<span>${open ? "▾" : "▸"}</span>${pill(st)}<span class="count">${p.data.count} row${p.data.count > 1 ? "s" : ""}</span>`;
+  this.e.onclick = () => { collapsed.has(st) ? collapsed.delete(st) : collapsed.add(st); p.api.onFilterChanged(); p.api.redrawRows({ rowNodes: [p.node] }); };
+};
+GroupRenderer.prototype.getGui = function () { return this.e; };
+GroupRenderer.prototype.refresh = function () { return false; };
+
+const columnDefs = [
+  { field: "outcome", headerName: "Status", width: 176, cellRenderer: p => pill(p.value), sortable: false,
+    filter: false, getQuickFilterText: p => (STATUS[p.value] || {}).label || p.value },
+  { field: "date", headerName: "Date", width: 112, cellClass: "num" },
+  { field: "invoice_number", headerName: "Invoice", width: 104, cellClass: "num" },
+  { field: "payer", headerName: "Payer / customer", width: 210,
+    cellRenderer: p => `<div>${esc(p.value)}</div><div class="sub" title="${esc(p.data.payer_email)}" style="overflow:hidden;text-overflow:ellipsis">${esc(p.data.payer_email)}</div>`,
+    getQuickFilterText: p => `${p.value} ${p.data.payer_email}`, autoHeight: true, wrapText: true },
+  { field: "amount", headerName: "Amount", width: 130, type: "rightAligned", cellClass: "num",
+    valueFormatter: p => money(p.value), comparator: (a, b) => Number(a?.value || 0) - Number(b?.value || 0) },
+  { field: "fee", headerName: "Fee", width: 100, type: "rightAligned", cellClass: "num", valueFormatter: p => money(p.value) },
+  { field: "difference", headerName: "Difference", width: 120, type: "rightAligned", cellClass: "num",
+    valueFormatter: p => p.value && Number(p.value.value) !== 0 ? money(p.value) : "" },
+  { field: "reason", headerName: "Why (AI reason)", flex: 1, minWidth: 320, wrapText: true, autoHeight: true,
+    cellRenderer: p => `${esc(p.value)}${p.data.reason_source === "ai" ? ' <span class="pill tone-info">AI</span>' : ""}` },
+  { field: "rule", headerName: "Matched by", width: 140,
+    valueFormatter: p => ({ invoice_ref: "invoice ref", amount_email: "amount + email", fee_tolerance: "fee tolerance",
+      ai: "AI", memo_heuristic: "memo heuristic" }[p.value] || "") + (p.data.confidence != null && p.data.confidence < 1 ? ` · ${Math.round(p.data.confidence * 100)}%` : "") },
+];
+
+function showDetail(r) {
+  const layout = document.getElementById("layout"), el = document.getElementById("detail");
+  if (!r || r.kind === "group") { layout.classList.remove("open"); return; }
+  const ev = Object.entries(r.evidence || {}).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+  el.innerHTML = `
+    <button id="close-detail" style="float:right" aria-label="Close detail">✕</button>
+    <h2>${r.kind === "invoice" ? "Invoice " + esc(r.id) : "Payment " + esc(r.id)}</h2>
+    <div>${pill(r.outcome)} ${r.needs_review ? '<span class="pill tone-warn">needs review</span>' : ""}</div>
+    <p>${esc(r.reason)}</p>
+    ${r.candidates && r.candidates.length ? `<p class="sub">Candidate invoices: ${r.candidates.map(esc).join(", ")}</p>` : ""}
+    <h2 style="margin-top:14px">Evidence (PayPal fields)</h2><dl>${ev || "<dd>none</dd>"}</dl>`;
+  layout.classList.add("open");
+  document.getElementById("close-detail").onclick = () => { layout.classList.remove("open"); gridApi.deselectAll(); };
+}
+
+const gridOptions = {
+  columnDefs,
+  defaultColDef: { sortable: true, resizable: true, filter: true, suppressHeaderMenuButton: true },
+  rowData: [],
+  getRowId: p => p.data.id,
+  isFullWidthRow: p => p.rowNode.data && p.rowNode.data.kind === "group",
+  fullWidthCellRenderer: GroupRenderer,
+  getRowHeight: p => p.data && p.data.kind === "group" ? 40 : undefined,
+  getRowClass: p => {
+    const s = STATUS[p.data?.outcome];
+    if (!s || p.data.kind === "group") return "";
+    return s.tone === "bad" ? "row-exception" : (s.exception ? "row-attention" : "");
+  },
+  isExternalFilterPresent: () => true,
+  doesExternalFilterPass: node => {
+    const r = node.data, onlyEx = document.getElementById("exceptions-only").checked;
+    const st = r.kind === "group" ? r.outcome : r.group;
+    if (statusFilter && st !== statusFilter) return false;
+    if (onlyEx && !(STATUS[st] || {}).exception) return false;
+    if (r.kind === "group") return true;
+    return !collapsed.has(st) || !!document.getElementById("search").value;
+  },
+  rowSelection: { mode: "singleRow", checkboxes: false, enableClickSelection: true },
+  onFilterChanged: e => e.api.resetRowHeights(),
+  onGridSizeChanged: e => e.api.resetRowHeights(),
+  onRowClicked: e => { if (e.data.kind === "group") return; e.node.setSelected(true); showDetail(e.data); },
+  overlayNoRowsTemplate: '<span class="state">No rows match these filters.</span>',
+  theme: agGrid.themeQuartz.withParams({
+    backgroundColor: "var(--surface)", foregroundColor: "var(--text)", headerBackgroundColor: "var(--surface-2)",
+    borderColor: "var(--border)", accentColor: "var(--accent)", fontFamily: "inherit", fontSize: 13,
+    rowHoverColor: "var(--surface-2)", selectedRowBackgroundColor: "var(--info-bg)",
+  }),
+};
+
+async function load() {
+  setLoading(true);
+  try {
+    const r = await fetch("/api/reconciliation");
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    data = await r.json();
+    document.getElementById("mode").textContent = `mode: ${data.mode}`;
+    document.getElementById("asof").textContent = `as of ${data.as_of}`;
+    document.getElementById("ai").textContent = `AI: ${data.ai_status}`;
+    const rows = rowsFrom(data);
+    renderChips(rows);
+    gridApi.setGridOption("rowData", groupedRows(rows));
+  } catch (e) {
+    gridApi.setGridOption("rowData", []);
+    gridApi.setGridOption("overlayNoRowsTemplate", `<span class="state">Could not load reconciliation (${esc(e.message)}). Is the server running?</span>`);
+    gridApi.showNoRowsOverlay();
+  } finally { setLoading(false); }
+}
+
+function setLoading(on) {
+  document.getElementById("sync").disabled = on;
+  if (on && gridApi) gridApi.setGridOption("loading", true); else if (gridApi) gridApi.setGridOption("loading", false);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  gridApi = agGrid.createGrid(document.getElementById("grid"), gridOptions);
+  document.getElementById("search").addEventListener("input", e => { gridApi.setGridOption("quickFilterText", e.target.value); gridApi.onFilterChanged(); });
+  document.getElementById("exceptions-only").addEventListener("change", () => gridApi.onFilterChanged());
+  document.getElementById("sync").onclick = async () => { setLoading(true); await fetch("/api/sync", { method: "POST" }); await load(); };
+  document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
+    document.querySelectorAll("nav.tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+    document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + b.dataset.tab));
+  });
+  load();
+});
+</script>
 </body>
 </html>

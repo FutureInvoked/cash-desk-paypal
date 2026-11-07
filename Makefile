@@ -1,6 +1,7 @@
 PY ?= python3.11
 VENV := .venv
 BIN := $(VENV)/bin
+PORT ?= 8000
 
 .PHONY: install test demo run audit-verify eval clean
 
@@ -14,11 +15,11 @@ test: install
 	$(BIN)/python -m pytest -q
 
 run: install
-	$(BIN)/python -m uvicorn cashdesk.app:app --host 127.0.0.1 --port 8000
+	$(BIN)/python -m uvicorn cashdesk.app:app --host 127.0.0.1 --port $(PORT)
 
 demo: install
-	@(sleep 2; open http://localhost:8000 2>/dev/null || xdg-open http://localhost:8000 2>/dev/null || true) &
-	$(BIN)/python -m uvicorn cashdesk.app:app --host 127.0.0.1 --port 8000
+	@(sleep 2; open http://localhost:$(PORT) 2>/dev/null || xdg-open http://localhost:$(PORT) 2>/dev/null || true) &
+	$(BIN)/python -m uvicorn cashdesk.app:app --host 127.0.0.1 --port $(PORT)
 
 audit-verify: install
 	$(BIN)/python -m cashdesk.audit verify
