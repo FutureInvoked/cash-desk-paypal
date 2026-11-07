@@ -1,0 +1,295 @@
+"""Deterministic reconciliation: pair PayPal transactions with invoices.
+
+Rules, in order (the first that applies wins):
+  1. invoice_ref     the transaction names the invoice: cart_info.paypal_invoice_id equals the
+                     invoice id, transaction_info.invoice_id equals its id or number, or the
+                     invoice number appears in the subject or note.
+  2. amount_email    exact amount and currency, and the payer email equals the invoice recipient,
+                     against exactly one open invoice.
+  3. fee_tolerance   payer email equals the recipient and the shortfall is no bigger than PayPal's
+                     fee on the invoice total (the payer deducted the fee), against exactly one open invoice.
+Anything else stays `unmatched`, with its candidate invoices, for the AI layer (E2).
+
+Every result carries `evidence`: the PayPal field paths and values the decision used.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from datetime import date, timedelta
+from decimal import ROUND_HALF_UP, Decimal
+
+from .models import Invoice, Money, Transaction
+
+OUTCOMES = {
+    # transactions
+    "matched", "partial", "overpaid", "duplicate", "unmatched", "fee_mismatch",
+    "currency_mismatch", "refunded", "refund", "pending", "ignored",
+    # invoices
+    "paid", "overdue", "open", "draft", "cancelled",
+}
+EXCEPTIONS = {"partial", "overpaid", "duplicate", "unmatched", "fee_mismatch", "currency_mismatch", "overdue"}
+
+OPEN_STATUSES = {"SENT", "UNPAID", "PARTIALLY_PAID", "PAYMENT_PENDING", "SCHEDULED"}
+PAID_STATUSES = {"PAID", "MARKED_AS_PAID", "PAID_EXTERNAL"}
+REFUND_CODES = {"T1107"}
+FEE_RATE = {"USD": (Decimal("0.0349"), Decimal("0.49")), "EUR": (Decimal("0.0349"), Decimal("0.39"))}
+FEE_SLACK = Decimal("0.05")
+DUPLICATE_WINDOW = timedelta(hours=24)
+
+R = "invoice.primary_recipients[0].billing_info.email_address"
+
+
+def paypal_fee(amount: Money) -> Money:
+    pct, fixed = FEE_RATE.get(amount.currency, FEE_RATE["USD"])
+    return Money((amount.amount * pct + fixed).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), amount.currency)
+
+
+def is_payment(t: Transaction) -> bool:
+    """Customer payment received: a T00xx event with a positive gross."""
+    return t.event_code.startswith("T00") and t.amount.amount > 0
+
+
+@dataclass
+class TxnResult:
+    txn_id: str
+    event_code: str
+    outcome: str
+    rule: str | None = None
+    invoice_id: str | None = None
+    invoice_number: str | None = None
+    difference: Money | None = None  # payment minus what was due (negative = short)
+    duplicate_of: str | None = None
+    candidates: list[str] = field(default_factory=list)
+    evidence: dict = field(default_factory=dict)
+
+
+@dataclass
+class InvoiceResult:
+    invoice_id: str
+    invoice_number: str
+    outcome: str
+    status: str
+    total: Money
+    received: Money
+    outstanding: Money
+    days_overdue: int = 0
+    transactions: list[str] = field(default_factory=list)
+
+
+@dataclass
+class MatchResult:
+    transactions: list[TxnResult]
+    invoices: list[InvoiceResult]
+
+    def txn(self, txn_id: str, event_code: str | None = None) -> TxnResult:
+        for r in self.transactions:
+            if r.txn_id == txn_id and (event_code is None or r.event_code == event_code):
+                return r
+        raise KeyError(txn_id)
+
+    def invoice_by_number(self, number: str) -> InvoiceResult:
+        return next(r for r in self.invoices if r.invoice_number == number)
+
+    def summary(self) -> dict:
+        by: dict[str, int] = {}
+        for r in self.transactions:
+            by[r.outcome] = by.get(r.outcome, 0) + 1
+        inv_by: dict[str, int] = {}
+        for r in self.invoices:
+            inv_by[r.outcome] = inv_by.get(r.outcome, 0) + 1
+        exceptions = sum(1 for r in self.transactions + self.invoices if r.outcome in EXCEPTIONS)
+        return {"transactions": len(self.transactions), "invoices": len(self.invoices),
+                "by_outcome": by, "invoices_by_outcome": inv_by, "exceptions": exceptions}
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def _find_by_reference(t: Transaction, invoices: list[Invoice]) -> tuple[Invoice | None, dict]:
+    by_id = {i.id: i for i in invoices}
+    by_num = {i.number: i for i in invoices if i.number}
+    if t.paypal_invoice_id and t.paypal_invoice_id in by_id:
+        inv = by_id[t.paypal_invoice_id]
+        ev = {"cart_info.paypal_invoice_id": t.paypal_invoice_id, "invoice.id": inv.id}
+        if t.invoice_ref:
+            ev["transaction_info.invoice_id"] = t.invoice_ref
+        return inv, ev | {"invoice.detail.invoice_number": inv.number}
+    if t.invoice_ref:
+        inv = by_id.get(t.invoice_ref) or by_num.get(t.invoice_ref)
+        if inv:
+            return inv, {"transaction_info.invoice_id": t.invoice_ref, "invoice.detail.invoice_number": inv.number}
+    for path, text in (("transaction_info.transaction_subject", t.subject), ("transaction_info.transaction_note", t.note)):
+        if not text:
+            continue
+        hits = [i for n, i in by_num.items() if re.search(rf"(?<![A-Za-z0-9]){re.escape(n)}(?![0-9])", text, re.I)]
+        if len(hits) == 1:
+            return hits[0], {path: text, "invoice.detail.invoice_number": hits[0].number}
+    return None, {}
+
+
+def _same_email(a: str | None, b: str | None) -> bool:
+    return bool(a and b and a.strip().lower() == b.strip().lower())
+
+
+def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: date) -> MatchResult:
+    txns = sorted(transactions, key=lambda t: (t.initiated, t.id))
+    results: dict[tuple, TxnResult] = {}
+    # payments that count toward an invoice, in time order: invoice id -> [(txn, result)]
+    applied: dict[str, list[tuple[Transaction, TxnResult]]] = {}
+    pending_for: dict[str, list[str]] = {}
+    refunded_for: dict[str, list[str]] = {}
+    by_id = {i.id: i for i in invoices}
+
+    def res(t: Transaction, outcome: str, **kw) -> TxnResult:
+        r = TxnResult(t.id, t.event_code, outcome, **kw)
+        results[t.key] = r
+        return r
+
+    def base_ev(t: Transaction) -> dict:
+        ev = {"transaction_info.transaction_id": t.id, "transaction_info.transaction_amount": str(t.amount),
+              "transaction_info.transaction_status": t.status,
+              "transaction_info.transaction_event_code": t.event_code}
+        if t.payer_email:
+            ev["payer_info.email_address"] = t.payer_email
+        return ev
+
+    # ---- pass 1: non-payments, refunds, pending, reversed, and rule 1 ----
+    unresolved: list[Transaction] = []
+    for t in txns:
+        ev = base_ev(t)
+        if t.event_code in REFUND_CODES:
+            inv, rev = _find_by_reference(t, invoices)
+            r = res(t, "refund", rule="invoice_ref" if inv else None, evidence=ev | rev |
+                    ({"transaction_info.paypal_reference_id": t.reference_id} if t.reference_id else {}))
+            if inv:
+                r.invoice_id, r.invoice_number = inv.id, inv.number
+            continue
+        if not is_payment(t) or t.status == "D":
+            res(t, "ignored", evidence=ev)
+            continue
+        inv, rev = _find_by_reference(t, invoices)
+        if t.status in ("P", "V"):
+            outcome = "pending" if t.status == "P" else "refunded"
+            r = res(t, outcome, rule="invoice_ref" if inv else None, evidence=ev | rev)
+            if inv:
+                r.invoice_id, r.invoice_number = inv.id, inv.number
+                (pending_for if t.status == "P" else refunded_for).setdefault(inv.id, []).append(t.id)
+            continue
+        if inv is None:
+            unresolved.append(t)
+            continue
+        r = res(t, "matched", rule="invoice_ref", invoice_id=inv.id, invoice_number=inv.number,
+                evidence=ev | rev | {"invoice.amount": str(inv.total)})
+        if t.amount.currency != inv.total.currency:
+            r.outcome = "currency_mismatch"
+            r.evidence["invoice.detail.currency_code"] = inv.total.currency
+            continue
+        applied.setdefault(inv.id, []).append((t, r))
+
+    # ---- pass 2: rules 2 and 3 against open invoices not yet covered ----
+    def covered(inv: Invoice) -> bool:
+        got = sum((x.amount.amount for x, _ in applied.get(inv.id, [])), Decimal("0"))
+        return got >= inv.total.amount
+
+    def open_for_rules(inv: Invoice) -> bool:
+        return inv.status in OPEN_STATUSES and not covered(inv)
+
+    for t in unresolved:
+        ev = base_ev(t)
+        same_payer = [i for i in invoices if open_for_rules(i) and _same_email(t.payer_email, i.recipient_email)
+                      and i.total.currency == t.amount.currency]
+        exact = [i for i in same_payer if (i.total - Money(sum((x.amount.amount for x, _ in applied.get(i.id, [])),
+                                                             Decimal("0")), i.total.currency)) == t.amount]
+        if len(exact) == 1:
+            inv = exact[0]
+            r = res(t, "matched", rule="amount_email", invoice_id=inv.id, invoice_number=inv.number,
+                    evidence=ev | {R: inv.recipient_email, "invoice.amount": str(inv.total),
+                                   "invoice.detail.invoice_number": inv.number})
+            applied.setdefault(inv.id, []).append((t, r))
+            continue
+        if len(exact) > 1:
+            res(t, "unmatched", candidates=sorted(i.number for i in exact), evidence=ev)
+            continue
+        within = [i for i in same_payer
+                  if Decimal("0") < (i.total.amount - t.amount.amount) <= paypal_fee(i.total).amount + FEE_SLACK]
+        if len(within) == 1:
+            inv = within[0]
+            r = res(t, "fee_mismatch", rule="fee_tolerance", invoice_id=inv.id, invoice_number=inv.number,
+                    evidence=ev | {R: inv.recipient_email, "invoice.amount": str(inv.total),
+                                   "invoice.detail.invoice_number": inv.number,
+                                   "expected_paypal_fee": str(paypal_fee(inv.total))})
+            applied.setdefault(inv.id, []).append((t, r))
+            continue
+        res(t, "unmatched", candidates=sorted(i.number for i in within or same_payer), evidence=ev)
+
+    # ---- pass 3: per-invoice running totals => matched / partial / overpaid / duplicate ----
+    for inv_id, pays in applied.items():
+        inv = by_id[inv_id]
+        running = Decimal("0")
+        for t, r in pays:
+            if r.outcome == "fee_mismatch":
+                r.difference = t.amount - inv.total
+                running += t.amount.amount
+                continue
+            earlier_same = [x for x, xr in pays if x is not t and x.initiated <= t.initiated
+                            and xr.outcome in ("matched", "partial", "overpaid") and x.amount == t.amount
+                            and _same_email(x.payer_email, t.payer_email)
+                            and t.initiated - x.initiated <= DUPLICATE_WINDOW]
+            if running >= inv.total.amount and earlier_same:
+                r.outcome, r.duplicate_of = "duplicate", earlier_same[-1].id
+                r.difference = t.amount
+                r.evidence["duplicate_of.transaction_id"] = earlier_same[-1].id
+                continue
+            before = running
+            running += t.amount.amount
+            r.difference = Money(running - inv.total.amount, inv.total.currency)
+            if running == inv.total.amount:
+                r.outcome = "matched"
+            elif running < inv.total.amount:
+                short = inv.total.amount - running
+                r.outcome = "fee_mismatch" if before == 0 and short <= paypal_fee(inv.total).amount + FEE_SLACK \
+                    and not inv.raw.get("configuration", {}).get("partial_payment", {}).get("allow_partial_payment") \
+                    else "partial"
+            else:
+                r.outcome = "overpaid"
+
+    # ---- invoices ----
+    inv_results: list[InvoiceResult] = []
+    for inv in sorted(invoices, key=lambda i: i.number):
+        pays = [(t, r) for t, r in applied.get(inv.id, []) if r.outcome != "duplicate"]
+        received = Money(sum((t.amount.amount for t, _ in pays), Decimal("0")), inv.total.currency)
+        outstanding = Money(max(inv.total.amount - received.amount, Decimal("0")), inv.total.currency)
+        days = (as_of - inv.due_date).days if inv.due_date else 0
+        if inv.status == "DRAFT":
+            outcome = "draft"
+        elif inv.status in {"CANCELLED", "AUTO_CANCELLED"}:
+            outcome = "cancelled"
+        elif refunded_for.get(inv.id) or inv.status in {"REFUNDED", "MARKED_AS_REFUNDED"}:
+            outcome = "refunded"
+        elif pays and received.amount > inv.total.amount:
+            outcome = "overpaid"
+        elif pays and any(r.outcome == "fee_mismatch" for _, r in pays):
+            outcome = "fee_mismatch"
+        elif pays and received.amount >= inv.total.amount:
+            outcome = "paid"
+        elif pays:
+            outcome = "partial"
+        elif pending_for.get(inv.id):
+            outcome = "pending"
+        elif inv.status in PAID_STATUSES:
+            outcome = "paid"  # paid per PayPal, payment outside this search window
+        elif inv.due_date and days > 0:
+            outcome = "overdue"
+        else:
+            outcome = "open"
+        inv_results.append(InvoiceResult(
+            inv.id, inv.number, outcome, inv.status, inv.total, received, outstanding,
+            days_overdue=max(days, 0) if outcome in ("overdue", "partial") else 0,
+            transactions=[t.id for t, _ in applied.get(inv.id, [])],
+        ))
+
+    ordered = [results[t.key] for t in txns]
+    return MatchResult(ordered, inv_results)
