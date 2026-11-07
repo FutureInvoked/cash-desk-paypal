@@ -51,6 +51,16 @@ def is_payment(t: Transaction) -> bool:
     return t.event_code.startswith("T00") and t.amount.amount > 0
 
 
+@dataclass(frozen=True)
+class Link:
+    """A suggested payment->invoice link from outside the rules (the AI layer)."""
+    invoice_number: str
+    rule: str  # "ai" or "memo_heuristic"
+    resolved_by: str  # "ai" or "fallback"
+    confidence: float
+    evidence: dict
+
+
 @dataclass
 class TxnResult:
     txn_id: str
@@ -63,6 +73,12 @@ class TxnResult:
     duplicate_of: str | None = None
     candidates: list[str] = field(default_factory=list)
     evidence: dict = field(default_factory=dict)
+    # filled by the AI layer (cashdesk.ai)
+    resolved_by: str = "rules"  # rules | ai | fallback
+    confidence: float = 1.0
+    needs_review: bool = False
+    reason: str = ""
+    reason_source: str = ""  # ai | rules
 
 
 @dataclass
@@ -76,12 +92,16 @@ class InvoiceResult:
     outstanding: Money
     days_overdue: int = 0
     transactions: list[str] = field(default_factory=list)
+    last_sent: str | None = None
+    reason: str = ""
+    reason_source: str = ""
 
 
 @dataclass
 class MatchResult:
     transactions: list[TxnResult]
     invoices: list[InvoiceResult]
+    ai_status: str = "not run"
 
     def txn(self, txn_id: str, event_code: str | None = None) -> TxnResult:
         for r in self.transactions:
@@ -134,7 +154,11 @@ def _same_email(a: str | None, b: str | None) -> bool:
     return bool(a and b and a.strip().lower() == b.strip().lower())
 
 
-def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: date) -> MatchResult:
+def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: date,
+          links: dict[str, Link] | None = None) -> MatchResult:
+    """Run the rules. `links` are AI/heuristic suggestions applied only to payments the rules
+    left unmatched, and only to open invoices in the same currency."""
+    links = links or {}
     txns = sorted(transactions, key=lambda t: (t.initiated, t.id))
     results: dict[tuple, TxnResult] = {}
     # payments that count toward an invoice, in time order: invoice id -> [(txn, result)]
@@ -199,6 +223,17 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
 
     for t in unresolved:
         ev = base_ev(t)
+        link = links.get(t.id)
+        if link:
+            inv = next((i for i in invoices if i.number == link.invoice_number), None)
+            if inv and open_for_rules(inv) and inv.total.currency == t.amount.currency:
+                r = res(t, "matched", rule=link.rule, invoice_id=inv.id, invoice_number=inv.number,
+                        evidence=ev | link.evidence | {"invoice.detail.invoice_number": inv.number,
+                                                       "invoice.amount": str(inv.total)},
+                        resolved_by=link.resolved_by, confidence=link.confidence,
+                        needs_review=link.confidence < 0.8)
+                applied.setdefault(inv.id, []).append((t, r))
+                continue
         same_payer = [i for i in invoices if open_for_rules(i) and _same_email(t.payer_email, i.recipient_email)
                       and i.total.currency == t.amount.currency]
         exact = [i for i in same_payer if (i.total - Money(sum((x.amount.amount for x, _ in applied.get(i.id, [])),
@@ -289,6 +324,7 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
             inv.id, inv.number, outcome, inv.status, inv.total, received, outstanding,
             days_overdue=max(days, 0) if outcome in ("overdue", "partial") else 0,
             transactions=[t.id for t, _ in applied.get(inv.id, [])],
+            last_sent=inv.last_sent.date().isoformat() if inv.last_sent else None,
         ))
 
     ordered = [results[t.key] for t in txns]

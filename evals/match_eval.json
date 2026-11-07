@@ -1,0 +1,223 @@
+{
+  "description": "Expected reconciliation outcome per fixture row (Northwind Studio, as of 2026-11-07). Items with needs_ai=true are unresolvable by the deterministic rules alone.",
+  "as_of": "2026-11-07",
+  "items": [
+    {
+      "id": "848FFC3E8D809BF1E",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "5349CA6B818A5B93E",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "043FA8F1F7560B254",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "1EBF34729829609DA",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "03FE54AAC64E6A1BD",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "3D084E2D06E5A98D4",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "82A80D6C09ED86D56",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "7853CEBF3B9B50BEF",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "FF13797259FBC9120",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "BEEFC4499C8309BD0",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "E0B3D0459E765C3C7",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "9A5C708D184B996A0",
+      "kind": "transaction",
+      "case": "clean_match",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "684DFE3D033F64DB8",
+      "kind": "transaction",
+      "case": "partial_payment",
+      "expected_outcome": "partial",
+      "needs_ai": false
+    },
+    {
+      "id": "6FC0EA11FF213AF9E",
+      "kind": "transaction",
+      "case": "overpayment",
+      "expected_outcome": "overpaid",
+      "needs_ai": false
+    },
+    {
+      "id": "092BA033726F8904B",
+      "kind": "transaction",
+      "case": "duplicate_payment",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "5E9D76CF99B890BE0",
+      "kind": "transaction",
+      "case": "duplicate_payment",
+      "expected_outcome": "duplicate",
+      "needs_ai": false
+    },
+    {
+      "id": "934B6BF994C1A1552",
+      "kind": "transaction",
+      "case": "payment_without_invoice",
+      "expected_outcome": "unmatched",
+      "needs_ai": false
+    },
+    {
+      "id": "6DDAAD0BD05B87560",
+      "kind": "transaction",
+      "case": "payment_without_invoice",
+      "expected_outcome": "unmatched",
+      "needs_ai": false
+    },
+    {
+      "id": "NW-1016",
+      "kind": "invoice",
+      "case": "overdue_unpaid",
+      "expected_outcome": "overdue",
+      "needs_ai": false
+    },
+    {
+      "id": "NW-1017",
+      "kind": "invoice",
+      "case": "overdue_unpaid",
+      "expected_outcome": "overdue",
+      "needs_ai": false
+    },
+    {
+      "id": "40EF90A02E577BC91",
+      "kind": "transaction",
+      "case": "fee_only_difference",
+      "expected_outcome": "fee_mismatch",
+      "needs_ai": false
+    },
+    {
+      "id": "A878C16AB129834C9",
+      "kind": "transaction",
+      "case": "payer_email_differs",
+      "expected_outcome": "matched",
+      "needs_ai": true
+    },
+    {
+      "id": "D14B8861D0925D2D6",
+      "kind": "transaction",
+      "case": "different_currency",
+      "expected_outcome": "matched",
+      "needs_ai": false
+    },
+    {
+      "id": "0092FF64160B7CCCA",
+      "kind": "transaction",
+      "case": "different_currency",
+      "expected_outcome": "currency_mismatch",
+      "needs_ai": false
+    },
+    {
+      "id": "B1DF078C6AAED5652",
+      "kind": "transaction",
+      "case": "refunded_transaction",
+      "expected_outcome": "refunded",
+      "needs_ai": false
+    },
+    {
+      "id": "BE03405A39EE75160",
+      "kind": "transaction",
+      "case": "refunded_transaction",
+      "expected_outcome": "refund",
+      "needs_ai": false
+    },
+    {
+      "id": "D26CF1D282F39AE1E",
+      "kind": "transaction",
+      "case": "pending_transaction",
+      "expected_outcome": "pending",
+      "needs_ai": false
+    },
+    {
+      "id": "NW-1018",
+      "kind": "invoice",
+      "case": "open_not_due",
+      "expected_outcome": "open",
+      "needs_ai": false
+    },
+    {
+      "id": "NW-1019",
+      "kind": "invoice",
+      "case": "open_not_due",
+      "expected_outcome": "open",
+      "needs_ai": false
+    },
+    {
+      "id": "NW-1026",
+      "kind": "invoice",
+      "case": "draft_invoice",
+      "expected_outcome": "draft",
+      "needs_ai": false
+    },
+    {
+      "id": "E60BEAC3F316EE49A",
+      "kind": "transaction",
+      "case": "non_sales_transaction",
+      "expected_outcome": "ignored",
+      "needs_ai": false
+    }
+  ]
+}

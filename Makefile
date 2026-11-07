@@ -2,7 +2,7 @@ PY ?= python3.11
 VENV := .venv
 BIN := $(VENV)/bin
 
-.PHONY: install test demo run audit-verify clean
+.PHONY: install test demo run audit-verify eval clean
 
 $(BIN)/python:
 	@if command -v uv >/dev/null 2>&1; then uv venv -q -p $(PY) $(VENV); else $(PY) -m venv $(VENV); fi
@@ -25,3 +25,6 @@ audit-verify: install
 
 clean:
 	rm -rf $(VENV) var/*.db var/*.jsonl
+
+eval: install
+	$(BIN)/python tools/run_eval.py
