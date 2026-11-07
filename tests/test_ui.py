@@ -90,3 +90,31 @@ def test_summary_header_contract():
     run = HTML[HTML.index("async function confirmAndRun"):]
     run = run[:run.index("\n}\n")]
     assert "loadSummary" in run or "load()" in run
+
+
+def test_loading_is_cleared_before_rows_are_set():
+    # AG Grid warning #99: setting rowData while `loading` is true triggers an internal hideOverlay()
+    body = HTML[HTML.index("async function load()"):]
+    body = body[:body.index("\n}\n")]
+    assert body.index('setGridOption("loading", false)') < body.index('setGridOption("rowData", groupedRows(rows))')
+
+
+def test_error_states_for_every_tab():
+    assert HTML.count("Could not load") >= 3  # reconciliation, approvals, audit
+    assert 'id="banner"' in HTML  # page-level connection banner
+    assert "server" in HTML.lower()
+
+
+def test_dialog_keyboard_and_focus():
+    assert 'addEventListener("close"' in HTML  # focus returns to the opener when the dialog closes
+    assert "lastFocus" in HTML
+
+
+def test_no_horizontal_page_scroll_rules():
+    assert "overflow-x: hidden" in HTML or "max-width: 100%" in HTML
+
+
+def test_resync_handles_a_dead_server():
+    h = HTML[HTML.index('getElementById("sync").onclick'):]
+    h = h[:h.index("};")]
+    assert "catch" in h and "showBanner" in h

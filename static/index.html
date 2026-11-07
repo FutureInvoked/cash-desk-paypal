@@ -22,6 +22,9 @@
     }
   }
   * { box-sizing: border-box; }
+  html, body { overflow-x: hidden; }
+  main, .kpis, header { max-width: 100%; }
+  .banner { padding: 10px 20px; color: var(--bad); background: var(--bad-bg); border-bottom: 1px solid var(--border); font-weight: 600; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
@@ -95,7 +98,7 @@
           background: var(--surface); border-bottom: 1px solid var(--border); }
   .kpi { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg); }
   .kpi-label { font-size: 12px; color: var(--muted); }
-  .kpi-value { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .kpi-value { font-size: clamp(16px, 1.55vw, 22px); font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
   .kpi-sub { font-size: 12px; color: var(--muted); }
   .chain { padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; font-weight: 600; }
   .chain.ok { color: var(--ok); background: var(--ok-bg); }
@@ -118,6 +121,7 @@
   </div>
   <button class="primary" id="sync">Re-sync PayPal</button>
 </header>
+<div class="banner" id="banner" role="alert" hidden></div>
 <section class="kpis" aria-label="Summary">
   <div class="kpi"><div class="kpi-label">Payments matched</div><div class="kpi-value" id="kpi-matched">…</div><div class="kpi-sub" id="kpi-matched-sub"></div></div>
   <div class="kpi"><div class="kpi-label">Unreconciled payments</div><div class="kpi-value" id="kpi-unreconciled">…</div><div class="kpi-sub">unmatched, duplicate or wrong currency</div></div>
@@ -344,13 +348,20 @@ async function load() {
     renderSummary(data.summary);
     const rows = rowsFrom(data);
     renderChips(rows);
+    hideBanner();
+    gridApi.setGridOption("loading", false);  // must be off before rowData (AG Grid warning #99)
     gridApi.setGridOption("rowData", groupedRows(rows));
   } catch (e) {
+    showBanner(`Could not reach the Cash Desk server (${e.message}). Is it running? Start it with "make demo".`);
+    gridApi.setGridOption("loading", false);
     gridApi.setGridOption("rowData", []);
     gridApi.setGridOption("overlayNoRowsTemplate", `<span class="state">Could not load reconciliation (${esc(e.message)}). Is the server running?</span>`);
     gridApi.showNoRowsOverlay();
   } finally { setLoading(false); }
 }
+
+function showBanner(msg) { const b = document.getElementById("banner"); b.textContent = msg; b.hidden = false; }
+function hideBanner() { document.getElementById("banner").hidden = true; }
 
 function setLoading(on) {
   document.getElementById("sync").disabled = on;
@@ -418,7 +429,7 @@ const QSTATUS = {
 const ACTION = { send_reminder: "Send reminder", create_draft_invoice: "Create + send invoice",
   record_payment: "Record payment", refund_capture: "Refund duplicate" };
 const qpill = st => { const s = QSTATUS[st] || { label: st, tone: "neutral" }; return `<span class="pill tone-${s.tone}">${esc(s.label)}</span>`; };
-let approvalsApi = null, approvals = [], current = null;
+let approvalsApi = null, approvals = [], current = null, lastFocus = null;
 
 function ActionsRenderer() {}
 ActionsRenderer.prototype.init = function (p) {
@@ -460,6 +471,7 @@ function callsFor(it) {
 
 function openConfirm(it, act) {
   current = { it, act };
+  lastFocus = document.activeElement;
   const reject = act === "reject";
   document.getElementById("confirm-title").textContent = reject ? "Reject this action" :
     `${ACTION[it.proposal.type] || it.proposal.type}: approve and run`;
@@ -560,13 +572,26 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   loadAudit();
   document.getElementById("confirm-run").onclick = confirmAndRun;
+  // Esc closes the native <dialog>; either way, focus goes back to the button that opened it
+  document.getElementById("confirm").addEventListener("close", () => { if (lastFocus && lastFocus.isConnected) lastFocus.focus(); });
   document.getElementById("confirm-cancel").onclick = () => document.getElementById("confirm").close();
   loadApprovals();
 
   gridApi = agGrid.createGrid(document.getElementById("grid"), gridOptions);
   document.getElementById("search").addEventListener("input", e => { gridApi.setGridOption("quickFilterText", e.target.value); gridApi.onFilterChanged(); });
   document.getElementById("exceptions-only").addEventListener("change", () => gridApi.onFilterChanged());
-  document.getElementById("sync").onclick = async () => { setLoading(true); await fetch("/api/sync", { method: "POST" }); await load(); };
+  document.getElementById("sync").onclick = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/sync", { method: "POST" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    } catch (e) {
+      setLoading(false);
+      showBanner(`Could not re-sync from PayPal (${e.message}). Is the Cash Desk server running? Start it with "make demo".`);
+      return;
+    }
+    await load(); await loadApprovals(); await loadAudit();
+  };
   document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
     document.querySelectorAll("nav.tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
     document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + b.dataset.tab));
