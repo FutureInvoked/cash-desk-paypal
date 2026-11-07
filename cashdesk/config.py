@@ -10,6 +10,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SANDBOX_BASE_URL = "https://api-m.sandbox.paypal.com"
 
 
+SANDBOX_HOST = "api-m.sandbox.paypal.com"
+
+
+def sandbox_base_url() -> str:
+    """The only PayPal base URL this app will ever call. Anything else (live included) is refused."""
+    from urllib.parse import urlparse
+
+    url = os.environ.get("PAYPAL_BASE_URL", SANDBOX_BASE_URL).rstrip("/")
+    u = urlparse(url)
+    if u.scheme != "https" or u.hostname != SANDBOX_HOST or u.port not in (None, 443) or u.path not in ("", "/"):
+        raise ValueError(f"refusing to use PayPal base URL {url!r}: only {SANDBOX_BASE_URL} is allowed")
+    return SANDBOX_BASE_URL
+
+
 @dataclass(frozen=True)
 class Settings:
     paypal_mode: str
