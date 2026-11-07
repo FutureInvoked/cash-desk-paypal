@@ -59,10 +59,14 @@ def seed(client, *, payer_email: str, dry_run: bool = False, steps_path: Path | 
     existing = {}
     if not dry_run:
         for inv in client.list_invoices():
+            if inv.status in ("CANCELLED", "AUTO_CANCELLED"):
+                continue
             note = (inv.raw.get("detail") or {}).get("note") or ""
             for p in PLAN:
                 if TAG.format(key=p["key"]) in note:
                     existing[p["key"]] = inv
+    import hashlib
+    run = hashlib.sha256(payer_email.lower().encode()).hexdigest()[:8]  # new request ids per payer
     created = skipped = 0
     rows = []
     for p in PLAN:
@@ -76,9 +80,9 @@ def seed(client, *, payer_email: str, dry_run: bool = False, steps_path: Path | 
         else:
             inv = client.create_draft_invoice(
                 recipient_email=email, recipient_name=p["name"], item=p["item"],
-                amount=Money(Decimal(p["amount"]), p["currency"]), request_id=f"cashdesk-seed-{p['key']}-create",
+                amount=Money(Decimal(p["amount"]), p["currency"]), request_id=f"cashdesk-seed-{p['key']}-{run}-create",
                 note=f"Thank you, {p['business']}. {TAG.format(key=p['key'])}")
-            client.send_invoice(inv.id, request_id=f"cashdesk-seed-{p['key']}-send")
+            client.send_invoice(inv.id, request_id=f"cashdesk-seed-{p['key']}-{run}-send")
             created += 1
         rows.append((p, inv.number or inv.id, email))
     if steps_path and not dry_run:

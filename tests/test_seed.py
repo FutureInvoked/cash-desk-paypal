@@ -87,3 +87,15 @@ def test_owner_payment_steps_are_written(tmp_path):
     for p in PLAN:
         assert p["key"] in text
     assert "CLIENT_SECRET" not in text
+
+
+def test_cancelled_seed_invoices_are_recreated_with_new_request_ids():
+    fake = FakeInvoicing()
+    seed(client(fake), payer_email="wrong@business.example.com")
+    first_ids = {c[3] for c in fake.calls if c[0] == "POST" and c[1] == "/v2/invoicing/invoices"}
+    for inv in fake.invoices.values():
+        inv["status"] = "CANCELLED"
+    out = seed(client(fake), payer_email="buyer@personal.example.com")
+    assert out["created"] == len(PLAN)
+    second_ids = {c[3] for c in fake.calls if c[0] == "POST" and c[1] == "/v2/invoicing/invoices"} - first_ids
+    assert len(second_ids) == len(PLAN)  # PayPal idempotency would otherwise return the old invoices

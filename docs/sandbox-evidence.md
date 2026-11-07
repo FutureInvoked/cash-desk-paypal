@@ -18,6 +18,16 @@ not granted Invoicing or Transaction Search even with those features ticked. The
 - The desk in `PAYPAL_MODE=sandbox` read 10 invoices, all `open`, with 0 transactions and 0 proposals.
   That's correct before any payment.
 
+### Re-seed (2026-11-07)
+
+The first buyer email was the sandbox **business** account, which can't pay its own invoices. We
+cancelled the 7 invoices addressed to it (0001-0004, 0007, 0009, 0010) with
+`POST /v2/invoicing/invoices/{id}/cancel` and no emails sent. The seed then re-created them for the
+**personal** (buyer) account as 0011-0017. The fix to the seed: cancelled invoices don't count as seeded,
+and request ids include a hash of the payer, so PayPal's idempotency doesn't return the old invoices.
+Live set: 0005, 0006, 0008 go to fictional customers and stay unpaid or are paid from another
+address; 0011-0017 go to the buyer.
+
 ## S3 gated actions
 
 Pending. This needs the owner's sandbox payments (see `docs/sandbox-pay-steps.md`, which is generated
