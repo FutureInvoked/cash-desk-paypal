@@ -46,13 +46,39 @@ and fixture invoices parse the same way. Findings:
   `payments.transactions[].transaction_type`, and top-level `settings` and `unilateral`. The parser
   ignores unknown fields.
 - The list endpoint's `detail.metadata` has only `create_time`, with no `last_sent_time`. "Last sent"
-  is optional throughout.
+  is optional throughout. (A full `GET /v2/invoicing/invoices/{id}` does include `first_sent_time` and
+  `last_sent_time`; checked 2026-11-08.)
 - Transaction-side parity waits for Transaction Search to report the owner's payments.
 
 ## S3 gated actions
 
-Pending. This needs the owner's sandbox payments (see `docs/sandbox-pay-steps.md`, which is generated
-and gitignored). Once those are in, Transaction Search can take up to about 3 hours to report them.
+### Reminder (2026-11-08 01:1x CET), live sandbox through the API gate
+
+Run: `POST /api/sync` -> `POST /api/proposals/refresh` -> `POST /api/approvals/{id}/approve` ->
+`POST /api/approvals/{id}/execute`, with the same FastAPI app the board uses and keys from `.env`.
+
+Invoices 0005 and 0006 were due on receipt on 2026-11-07, so on 8 Nov the desk saw both as overdue.
+It proposed six reminders. Four of them (0008, 0013, 0015, 0017) were for invoices the owner had
+already paid by Send Money that night. Transaction Search had not reported those payments yet
+(it was refreshed only up to 22:29:59Z), so the desk could not know.
+**That is the case the human gate exists for.**
+
+| queue item | invoice | action | decision | PayPal result |
+|---|---|---|---|---|
+| q00001 | 0005 (240.00 USD) | `POST /v2/invoicing/invoices/INV2-FQBD-KUDF-YRSW-8GWA/remind` | approved, executed | **HTTP 204**, `PayPal-Request-Id: cashdesk-q00001` |
+| q00002 | 0006 (35.00 USD) | reminder | rejected: "Small amount, one day late: wait a week before reminding." | not sent |
+| q00003-q00006 | 0008, 0013, 0015, 0017 | reminder | rejected: "Customer already paid by Send Money on 2026-11-08; Transaction Search has not reported it yet. Do not chase." | not sent |
+
+- A second `execute` on q00001 returned the stored result with the same request id. Nothing was sent twice.
+- Audit chain: 14 records, verify OK. Head `5226c1b27cee41b222a94a0b79b3f0cbb45246c3cb251eb30d47d40ac370cc0b`.
+- PayPal does not change the invoice's `last_sent_time` on a reminder (still 2026-11-07T08:49:11Z
+  afterwards). The 204 response and the request id are the record.
+- Bug found and fixed in this run: the reminder subject said "is 1 days overdue". It now says
+  "1 day" (test added).
+
+### Refund of the 0014 duplicate
+
+Pending: waiting for Transaction Search to report the owner's second (duplicate) 80.00 USD Send Money payment.
 
 ## S4b: Transaction Search parity (2026-11-08 00:5x CET)
 

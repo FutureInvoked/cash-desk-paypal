@@ -121,3 +121,17 @@ def test_proposals_are_deterministic_and_carry_reasons(setup):
 def test_proposing_never_touches_paypal(setup):
     c, *_ = setup
     assert c.calls == []
+
+
+def test_reminder_subject_says_1_day_not_1_days():
+    # Found in the live S3 run on 2026-11-08: "is 1 days overdue".
+    from dataclasses import replace
+    c = FixturePayPalClient()
+    invs = c.list_invoices()
+    txns = c.search_transactions(datetime(2026, 10, 8, tzinfo=timezone.utc), datetime(2026, 11, 7, tzinfo=timezone.utc))
+    r = reconcile(invs, txns, as_of=AS_OF, reconciler=FallbackReconciler())
+    overdue = [x for x in r.invoices if x.outcome == "overdue"]
+    assert overdue
+    r.invoices = [replace(x, days_overdue=1) if x.outcome == "overdue" else x for x in r.invoices]
+    subjects = [p.api_calls[0]["body"]["subject"] for p in propose(r, invs, txns, as_of=AS_OF) if p.type == "send_reminder"]
+    assert subjects and all(s.endswith("is 1 day overdue") for s in subjects), subjects

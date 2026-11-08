@@ -60,7 +60,7 @@ def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction
             continue
         inv = inv_by_num[r.invoice_number]
         body = {
-            "subject": f"Reminder: invoice {inv.number} from {BUSINESS} is {r.days_overdue} days overdue",
+            "subject": f"Reminder: invoice {inv.number} from {BUSINESS} is {r.days_overdue} day{'' if r.days_overdue == 1 else 's'} overdue",
             "note": (f"Hi {inv.recipient_name or 'there'}, a friendly reminder that invoice {inv.number} "
                      f"({r.outstanding}) was due on {inv.due_date.isoformat()}. "
                      f"You can pay it from the original invoice link. Thank you!"),
