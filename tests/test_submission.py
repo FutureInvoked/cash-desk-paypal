@@ -74,3 +74,17 @@ def test_shots_show_the_judged_things():
               "paypal-request-id", "audit", "make demo", "ag grid community", "claude"):
         assert s in low, s
     assert "logo" not in low
+
+
+def test_after_s3_the_text_cites_the_recorded_sandbox_run():
+    # Once docs/sandbox-evidence.md records the real refund, the marker must be gone and every
+    # sandbox id the text cites must be in the evidence (no invented results).
+    ev = (ROOT / "docs" / "sandbox-evidence.md")
+    if not ev.exists() or "86940605T47984402" not in ev.read_text():
+        return
+    evidence = ev.read_text()
+    assert "UPDATE AFTER S3" not in TEXT
+    for rid in ("cashdesk-q00001", "cashdesk-q00007", "86940605T47984402"):
+        assert rid in TEXT and rid in evidence, rid
+    for cited in re.findall(r"cashdesk-q\d{5}", TEXT):
+        assert cited in evidence, cited

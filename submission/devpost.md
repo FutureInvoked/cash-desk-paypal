@@ -2,10 +2,6 @@
 
 **Tagline:** An AI reconciliation and collections desk for small businesses paid through PayPal: it matches, explains and proposes, and a human approves every action.
 
-<!-- UPDATE AFTER S3: once the sandbox run is recorded in docs/sandbox-evidence.md, replace the
-"Where it runs today" paragraph with the real sandbox results (invoices created, reminder sent,
-refund issued, request ids) and delete this comment. -->
-
 ## Inspiration
 
 Every small business that takes PayPal ends the month with the same questions:
@@ -69,8 +65,24 @@ freelancers to agencies with a few dozen clients a month.
 
 **Where it runs today:** out of the box it runs on **Northwind Studio**, a fictional design agency
 with 26 invoices and 26 PayPal transactions. The sample data copies PayPal's response schemas field
-for field, so judges can try everything with no keys (`make demo`). With sandbox keys in `.env`,
-the same code path talks to the PayPal sandbox.
+for field, so judges can try everything with no keys (`make demo`).
+
+With sandbox keys in `.env`, the same code runs against the real PayPal sandbox, and we did exactly
+that on 7 and 8 November 2026:
+- **The setup:** 10 real sandbox invoices. A buyer account paid some of them through the invoice
+  link and others with Send Money: a part payment, a duplicate, a payment short by the fee, and a
+  payment with a tip.
+- **Reconciliation:** the desk sorted every one correctly. Matched, partial, duplicate, fee short
+  (exactly PayPal's 2.24) and overpaid, including a EUR invoice.
+- **The refund:** the duplicate was refunded for real through the approval gate. PayPal refund
+  `86940605T47984402` completed for 80.00 USD with `PayPal-Request-Id: cashdesk-q00007`, and a
+  retry did not refund twice.
+- **The reminder:** an overdue invoice got a real reminder (`cashdesk-q00001`, HTTP 204).
+- **What the gate caught:** the agent also proposed reminders for four invoices the buyer had just
+  paid by Send Money. Transaction Search hadn't reported those payments yet; it runs about 2 hours
+  behind. The human rejected them with a note. That moment is why every action waits for a person.
+
+Request ids, statuses and the audit head hash are in `docs/sandbox-evidence.md`.
 
 ## How we built it
 
@@ -88,7 +100,7 @@ the same code path talks to the PayPal sandbox.
   (`cashdesk-<item>`; a retry never double-refunds), plus a sha256 hash-chained audit log.
 - **Frontend:** a single HTML page with AG Grid Community 36.2.0 from a CDN. There is no build step,
   and light and dark themes are supported.
-- **Process:** built test-first. About 200 tests cover every reconciliation case, every policy rule
+- **Process:** built test-first. About 240 tests cover every reconciliation case, every policy rule
   (including attempts to bypass it), the queue lifecycle and audit tampering.
 
 ## Challenges we ran into

@@ -304,7 +304,7 @@ def invoice_reason(r: InvoiceResult) -> str:
         return f"{n} paid short by about PayPal's fee ({paypal_fee(r.total)}); decide whether to write it off."
     if r.outcome == "overdue":
         sent = f"; last sent {r.last_sent}" if r.last_sent else ""
-        return f"{n} is {r.days_overdue} days overdue (invoice.detail.payment_term.due_date passed), {r.outstanding} unpaid{sent}; send a reminder."
+        return f"{n} is {r.days_overdue} day{'' if r.days_overdue == 1 else 's'} overdue (invoice.detail.payment_term.due_date passed), {r.outstanding} unpaid{sent}; send a reminder."
     if r.outcome == "open":
         return f"{n} open, not yet due; {r.outstanding} outstanding."
     if r.outcome == "pending":

@@ -76,9 +76,42 @@ already paid by Send Money that night. Transaction Search had not reported those
 - Bug found and fixed in this run: the reminder subject said "is 1 days overdue". It now says
   "1 day" (test added).
 
-### Refund of the 0014 duplicate
+### Live reconciliation of the owner's payments (2026-11-08 02:58 CET)
 
-Pending: waiting for Transaction Search to report the owner's second (duplicate) 80.00 USD Send Money payment.
+The Send Money payments reached Transaction Search at the 23:59:59Z refresh, about 2 hours after
+they were made. Synced through `POST /api/sync`: 24 rows (8 payments; 16 rows ignored, mostly CZK
+conversions). Every case came out as designed on real data, with the fallback reconciler (no Anthropic key):
+
+| invoice | what the owner did | desk outcome | rule |
+|---|---|---|---|
+| 0011, 0012 | paid the invoice link | matched / paid | invoice_ref |
+| 0013 (120.00) | Send Money 60.00, note "invoice 0013 part 1" | partial, 60.00 still due | invoice_ref (from the note) |
+| 0014 (80.00) | paid the invoice, then Send Money 80.00 again a minute later | matched + **duplicate** (refund candidate) | invoice_ref |
+| 0015 (50.00) | Send Money 47.76 | fee short by 2.24 (= PayPal's fee) | fee_tolerance |
+| 0016 (90.00 EUR) | paid the invoice link | matched / paid | invoice_ref |
+| 0017 (45.00) | Send Money 49.50, note "invoice 0017 plus a tip" | overpaid by 4.50 | invoice_ref |
+| 0008 (150.00) | Send Money 150.00, memo only | not yet reported by Transaction Search at this refresh | - |
+| 0005, 0006 | nothing | overdue | - |
+
+### Refund of the 0014 duplicate (2026-11-08 02:58 CET)
+
+After the sync, `POST /api/proposals/refresh` enqueued one new item, q00007. The reminders already
+decided were skipped. q00007 was a refund with these details:
+`POST /v2/payments/captures/6FK36409J7161034V/refund`, body amount 80.00 USD, note to the payer and
+`invoice_id: 0014`. The policy check passed.
+
+| queue item | action | decision | PayPal result |
+|---|---|---|---|
+| q00007 | refund 80.00 USD of transaction 6FK36409J7161034V (the duplicate) | approved, executed | **refund 86940605T47984402, status COMPLETED, 80.00 USD**, `PayPal-Request-Id: cashdesk-q00007` |
+
+- `GET /v2/payments/refunds/86940605T47984402` confirms COMPLETED, 80.00 USD.
+- A second `execute` returned the stored result with the same request id. Nothing was refunded twice.
+- Audit chain after the run: 18 records, verify OK. Head `3baa82c0a8c718eab29445f5cce3c8729fbbc2d247a7840de3c22027ec51be59`.
+- Findings:
+  - A Send Money payment (`T0000`) can be refunded through the Payments v2 capture refund endpoint,
+    using its transaction id.
+  - PayPal accepted `invoice_id` in the refund body but does not echo it in the refund resource.
+  - The invoice-level reason also said "1 days overdue". Fixed (test added).
 
 ## S4b: Transaction Search parity (2026-11-08 00:5x CET)
 

@@ -179,3 +179,19 @@ def test_eval_file_matches_the_fixture_oracle_and_fallback_scores_100():
     invs, txns = data()
     score = run_eval(ev, invs, txns, as_of=AS_OF, reconciler=FallbackReconciler())
     assert score["accuracy"] == 1.0, score["failures"]
+
+
+def test_overdue_reason_says_1_day_not_1_days():
+    # Found in the live S3 run on 2026-11-08: "0005 is 1 days overdue".
+    from dataclasses import fields
+    from cashdesk.ai import invoice_reason
+    from cashdesk.matcher import InvoiceResult
+    from cashdesk.models import Money
+    from decimal import Decimal
+    kw = {f.name: None for f in fields(InvoiceResult)}
+    kw.update(invoice_id="I-1", invoice_number="0005", outcome="overdue", days_overdue=1,
+              outstanding=Money(Decimal("240.00"), "USD"), total=Money(Decimal("240.00"), "USD"))
+    r = InvoiceResult(**{k: v for k, v in kw.items() if v is not None or k not in ("transactions",)})
+    assert "is 1 day overdue" in invoice_reason(r)
+    r.days_overdue = 3
+    assert "is 3 days overdue" in invoice_reason(r)

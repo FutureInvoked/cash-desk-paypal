@@ -23,7 +23,7 @@ make demo          # installs into .venv, serves http://localhost:8000 with samp
 Other commands:
 
 ```bash
-make test          # 170+ tests: matcher, AI layer (mocked), policy, queue, audit, API, UI contract
+make test          # 240+ tests: matcher, AI layer (mocked), policy, queue, audit, API, UI contract
 make audit-verify  # verifies the hash chain of var/audit.jsonl
 make eval          # scores reconciliation against the expected outcomes in evals/match_eval.json
 ```
