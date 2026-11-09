@@ -144,7 +144,8 @@ class Desk:
     def refresh_proposals(self) -> dict:
         r = self.result()
         # Anything already queued (live, blocked or rejected) is not proposed again; expired can be.
-        seen = {i.proposal.intent_key for i in self.queue.list() if i.status != "expired"}
+        # (declined = PayPal answered no, nothing moved: it may be proposed again)
+        seen = {i.proposal.intent_key for i in self.queue.list() if i.status not in ("expired", "declined")}
         # what PayPal says each invoice still owes (before any suggested match is recorded)
         outstanding = {i.id: i.due for i in self.store.invoices()}
         enq = skipped = 0

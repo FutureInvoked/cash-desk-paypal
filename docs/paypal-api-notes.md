@@ -110,7 +110,7 @@ Errors use the shared shape `{name, message, debug_id, details:[{field, value, l
 
 ## 3. Invoicing v2
 
-All paths are under `/v2/invoicing`. The invoicing spec documents no `PayPal-Request-Id` header for send, remind or record payment. We still send one (harmless), **and** we dedupe on our side: the policy engine refuses a second intent for the same invoice and action.
+All paths are under `/v2/invoicing`. The invoicing spec documents no `PayPal-Request-Id` header for send, remind or record payment. We still send one (harmless), **and** we dedupe on our side: the policy engine refuses a second intent for the same invoice and action, and a retry first reads the invoice: a payment whose note is already on it isn't recorded again, a created invoice's id is saved before it is sent (a retry sends that one), and an invoice no longer in DRAFT isn't sent again.
 
 | call | method + path | request | success |
 |---|---|---|---|
@@ -210,14 +210,14 @@ From the guideline page:
 - Re-sending a request with the same ID returns the latest status of the original request instead of repeating it.
 - Omitting the header can create a duplicate.
 
-Our executor derives the ID from the approval-queue item ID (`cashdesk-<item_id>`). A retry after a crash therefore never double-refunds.
+Our executor fixes the ID when the action is queued (`cashdesk-<item_id>-<random>`, so a reinstall or a second desk never reuses one). A run that has started is only ever retried with that same ID: it never expires, and limits, the hourly cap and later syncs don't re-check it, so a retry after a lost reply or a crash returns PayPal's first result instead of refunding twice. If PayPal reports the refund as FAILED or CANCELLED, the item becomes `declined` and may be proposed again.
 
 ## 6. Sandbox gotchas (handled in code)
 
 1. **Transaction Search must be enabled** on the sandbox REST app (app settings, Features, "Transaction search"). Without it, the token lacks the reporting scope and the call returns 403 `NOT_AUTHORIZED`.
 2. **Reporting delay.** New transactions can take up to about 3 hours to appear in Transaction Search. Sandbox mode therefore also reads `invoice.payments.transactions[]` from Invoicing as a second source of payment evidence. The board shows `last_refreshed_datetime`.
-3. **31-day window.** `end_date - start_date <= 31 days`; longer ranges are chunked.
-4. **Rate limits.** HTTP 429 is retried with exponential backoff, at most 3 tries, honouring `Retry-After`.
+3. **31-day window.** `end_date - start_date <= 31 days`; the desk always asks for exactly the last 31 days and refuses longer ranges (nothing is chunked).
+4. **Rate limits.** HTTP 429 is retried with exponential backoff, at most 3 tries, honouring `Retry-After` in seconds or as an HTTP date; a wait over 30 s, or one that can't be read, fails at once as a PayPal error instead of holding the request open.
 5. **Remind returns 204** with an empty body, so don't parse JSON there.
 6. **Transaction IDs aren't unique** in reporting. The key is `(transaction_id, transaction_event_code, transaction_status)`.
 7. **Amounts are strings**, and debits/fees are negative.

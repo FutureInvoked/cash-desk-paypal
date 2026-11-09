@@ -117,7 +117,7 @@ AG Grid board.
   Without an API key, a deterministic fallback keeps the whole demo working. An eval file with
   31 expected outcomes (`make eval`) keeps both paths honest.
 - **Safety:** a policy engine, an approval queue and an executor with idempotency keys
-  (`cashdesk-<item>`; a retry never double-refunds), plus a sha256 hash-chained audit log.
+  (`cashdesk-<item>-<random>`, reused on every retry), plus a sha256 hash-chained audit log.
 - **Frontend:** a single HTML page with AG Grid Community 36.2.0 from a CDN. There is no build step,
   and light and dark themes are supported.
 - **Process:** built test-first. About 400 tests cover every reconciliation case, every policy rule

@@ -24,6 +24,27 @@ from .parse import parse_invoice, parse_transaction
 
 REPORTING_SCOPE = "https://uri.paypal.com/services/reporting/search/read"
 MAX_RETRIES = 3
+MAX_RETRY_WAIT = 30.0  # seconds; three waits stay well inside the queue's 300 s stale window
+
+
+def retry_after(value: str | None, *, default: float) -> float | None:
+    """Retry-After in either form PayPal may send: delta-seconds or an HTTP date. None if unparseable."""
+    if value is None or not value.strip():
+        return float(default)
+    v = value.strip()
+    try:
+        return max(float(v), 0.0)
+    except ValueError:
+        pass
+    from email.utils import parsedate_to_datetime
+    from datetime import datetime, timezone
+    try:
+        when = parsedate_to_datetime(v)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max((when - datetime.now(timezone.utc)).total_seconds(), 0.0)
 
 
 class PayPalError(Exception):
@@ -92,7 +113,10 @@ class SandboxPayPalClient(PayPalClient):
         for attempt in range(MAX_RETRIES + 1):
             r = self._http.request(method, path, params=params, json=json, content=content, headers=headers)
             if r.status_code == 429 and attempt < MAX_RETRIES:
-                self._sleep(float(r.headers.get("Retry-After", 2 ** attempt)))
+                wait = retry_after(r.headers.get("Retry-After"), default=2 ** attempt)
+                if wait is None or wait > MAX_RETRY_WAIT:
+                    self._raise(r, path)  # too long to hold a request (and an executing claim) open
+                self._sleep(wait)
                 continue
             if r.status_code == 401 and attempt == 0:  # token expired early: refresh once
                 self._token = None

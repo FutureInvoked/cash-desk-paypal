@@ -66,6 +66,12 @@ class FixturePayPalClient(PayPalClient):
                 self._drafts[iid] = doc
                 return {"id": iid, "status": "DRAFT", "detail": doc["detail"]}
             return self._once("create_invoice", method, path, request_id, body, created)
+        m = re.fullmatch(r"/v2/invoicing/invoices/([^/]+)", path)
+        if method == "GET" and m:
+            iid = m.group(1)
+            self._known_invoice(iid)
+            doc = self._drafts.get(iid) or next(d for d in self._invoices if d["id"] == iid)
+            return json.loads(json.dumps(doc))
         m = re.fullmatch(r"/v2/invoicing/invoices/([^/]+)/(send|remind|payments)", path)
         if method == "POST" and m:
             iid, what = m.groups()
@@ -78,8 +84,13 @@ class FixturePayPalClient(PayPalClient):
                 return self._once("send_invoice", method, path, request_id, body, sent)
             if what == "remind":
                 return self._once("remind", method, path, request_id, body, {"status": 204})
-            return self._once("record_payment", method, path, request_id, body,
-                              {"payment_id": _fake_id("EXTR-", request_id, 16)})
+            def recorded():
+                pid = _fake_id("EXTR-", request_id, 16)
+                doc = self._drafts.get(iid) or next(d for d in self._invoices if d["id"] == iid)
+                doc.setdefault("payments", {}).setdefault("transactions", []).append(
+                    {"payment_id": pid, "type": "EXTERNAL", **(body or {})})
+                return {"payment_id": pid}
+            return self._once("record_payment", method, path, request_id, body, recorded)
         m = re.fullmatch(r"/v2/payments/captures/([^/]+)/refund", path)
         if method == "POST" and m:
             cid = m.group(1)

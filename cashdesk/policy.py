@@ -150,7 +150,8 @@ class Policy:
             bad("integrity", msg)
 
         # rate cap
-        window = [h for h in history if h.status in COUNTED_STATUSES and timedelta(0) <= now - h.at <= timedelta(hours=1)
+        # a run dated in the future (the clock stepped back) still counts
+        window = [h for h in history if h.status in COUNTED_STATUSES and now - h.at <= timedelta(hours=1)
                   and h.proposal_id != p.id]
         if len(window) >= cfg.max_per_hour:
             bad("rate_cap", f"{len(window)} actions in the last hour; the limit is {cfg.max_per_hour}")

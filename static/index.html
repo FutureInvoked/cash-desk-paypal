@@ -434,12 +434,16 @@ const QSTATUS = {
   executing: { label: "Running", tone: "neutral" }, executed: { label: "Done", tone: "ok" },
   failed: { label: "Failed (retry)", tone: "bad" }, rejected: { label: "Rejected", tone: "neutral" },
   blocked: { label: "Blocked by policy", tone: "bad" }, expired: { label: "Expired", tone: "neutral" },
+  declined: { label: "Declined by PayPal", tone: "bad" },
 };
 const ACTION = { send_reminder: "Send reminder", create_draft_invoice: "Create + send invoice",
   record_payment: "Record payment", refund_capture: "Refund duplicate", refund_overpayment: "Refund overpayment" };
 const qpill = st => { const s = QSTATUS[st] || { label: st, tone: "neutral" }; return `<span class="pill tone-${s.tone}">${esc(s.label)}</span>`; };
 let approvalsApi = null, approvals = [], current = null, lastFocus = null;
 
+// a run that crashed mid-call shows as executing; after the stale window it may be retried (same request id)
+const stuck = it => it.status === "executing" && it.started_at &&
+  Date.now() - Date.parse(it.started_at) > (it.stale_after_seconds || 300) * 1000;
 function ActionsRenderer() {}
 ActionsRenderer.prototype.init = function (p) {
   const it = p.data;
@@ -448,8 +452,9 @@ ActionsRenderer.prototype.init = function (p) {
   if (it.status === "pending" || it.status === "awaiting_second") {
     const label = it.status === "awaiting_second" ? "2nd approval…" : "Approve…";
     this.e.innerHTML = `<button class="primary" data-act="approve">${label}</button><button class="danger" data-act="reject">Reject…</button>`;
-  } else if (it.status === "approved" || it.status === "failed") {
-    this.e.innerHTML = `<button class="primary" data-act="retry">${it.status === "failed" ? "Retry" : "Run"}…</button>`;
+  } else if (it.status === "approved" || it.status === "failed" || stuck(it)) {
+    this.e.innerHTML = `<button class="primary" data-act="retry">${it.status === "approved" ? "Run" : "Retry"}…</button>` +
+      (it.status === "approved" && !it.started_at ? `<button class="danger" data-act="reject">Reject…</button>` : "");
   } else {
     const who = [it.first_by, it.decided_by].filter(Boolean).join(" + ");
     this.e.innerHTML = `<span class="sub">${esc(who ? "by " + who : "")}</span>`;
