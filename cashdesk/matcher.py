@@ -128,7 +128,29 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
+NOTE_KEY = "invoice.payments.transactions[].note"
+
+
+def _recorded_on(t: Transaction, invoices: list[Invoice]) -> tuple[Invoice | None, dict]:
+    """A payment recorded on an invoice (e.g. by Cash Desk's record_payment) whose note names this
+    PayPal transaction id as a whole token. Found on the sandbox: the invoice is then MARKED_AS_PAID."""
+    pat = re.compile(rf"(?<![A-Za-z0-9]){re.escape(t.id)}(?![A-Za-z0-9])")
+    hits = []
+    for inv in invoices:
+        for p in (inv.raw.get("payments") or {}).get("transactions", []) or []:
+            note = p.get("note") or ""
+            if pat.search(note):
+                hits.append((inv, note))
+    if len(hits) == 1:
+        inv, note = hits[0]
+        return inv, {NOTE_KEY: note, "invoice.detail.invoice_number": inv.number}
+    return None, {}
+
+
 def _find_by_reference(t: Transaction, invoices: list[Invoice]) -> tuple[Invoice | None, dict]:
+    inv, ev = _recorded_on(t, invoices)
+    if inv:
+        return inv, ev
     by_id = {i.id: i for i in invoices}
     by_num = {i.number: i for i in invoices if i.number}
     if t.paypal_invoice_id and t.paypal_invoice_id in by_id:
@@ -291,11 +313,34 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
             else:
                 r.outcome = "overpaid"
 
+    # ---- refunds that point back at a payment (transaction_info.paypal_reference_id) ----
+    refunded_amt: dict[str, Decimal] = {}
+    refund_ids: dict[str, list[str]] = {}
+    for t in txns:
+        if t.event_code in REFUND_CODES and t.status == "S" and t.reference_id:
+            refunded_amt[t.reference_id] = refunded_amt.get(t.reference_id, Decimal("0")) + abs(t.amount.amount)
+            refund_ids.setdefault(t.reference_id, []).append(t.id)
+    excess_refunded: dict[str, Decimal] = {}
+    for t in txns:
+        r = results.get(t.key)
+        back = refunded_amt.get(t.id)
+        if r is None or not back:
+            continue
+        if r.outcome == "duplicate" and back >= t.amount.amount:
+            r.outcome = "refunded"
+            r.evidence["refunded_by.transaction_id"] = refund_ids[t.id][-1]
+        elif r.outcome == "overpaid" and r.difference is not None and back >= r.difference.amount:
+            excess_refunded[t.id] = r.difference.amount
+            r.evidence["refunded_excess"] = str(r.difference)
+            r.evidence["refunded_by.transaction_id"] = refund_ids[t.id][-1]
+            r.outcome = "matched"
+
     # ---- invoices ----
     inv_results: list[InvoiceResult] = []
     for inv in sorted(invoices, key=lambda i: i.number):
-        pays = [(t, r) for t, r in applied.get(inv.id, []) if r.outcome != "duplicate"]
-        received = Money(sum((t.amount.amount for t, _ in pays), Decimal("0")), inv.total.currency)
+        pays = [(t, r) for t, r in applied.get(inv.id, []) if r.outcome not in ("duplicate", "refunded")]
+        received = Money(sum((t.amount.amount - excess_refunded.get(t.id, Decimal("0")) for t, _ in pays),
+                             Decimal("0")), inv.total.currency)
         outstanding = Money(max(inv.total.amount - received.amount, Decimal("0")), inv.total.currency)
         days = (as_of - inv.due_date).days if inv.due_date else 0
         if inv.status == "DRAFT":

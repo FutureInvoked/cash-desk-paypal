@@ -79,9 +79,9 @@ that on 7 and 8 November 2026:
   payment with a tip.
 - **Reconciliation:** the desk sorted every one correctly. Matched, partial, duplicate, fee short
   (exactly PayPal's 2.24) and overpaid, including a EUR invoice.
-- **The refund:** the duplicate was refunded for real through the approval gate. PayPal refund
-  `86940605T47984402` completed for 80.00 USD with `PayPal-Request-Id: cashdesk-q00007`, and a
-  retry did not refund twice.
+- **The refunds:** the duplicate was refunded through the approval gate (PayPal refund
+  `86940605T47984402`, 80.00 USD, `PayPal-Request-Id: cashdesk-q00007`; a retry did not refund
+  twice). Later the owner approved a partial refund of a 4.50 tip (`8FU36371TX504383F`).
 - **The reminder:** an overdue invoice got a real reminder (`cashdesk-q00001`, HTTP 204).
 - **The memo match:** a 150.00 Send Money with no invoice number was suggested for invoice 0008 from
   its note alone ("Lumen Bakery - Website retainer"), marked for review, with a record-payment
@@ -93,7 +93,7 @@ that on 7 and 8 November 2026:
   paid by Send Money. Transaction Search hadn't reported those payments yet; it runs about 2 hours
   behind. The human rejected them with a note. That moment is why every action waits for a person.
 
-Request ids, statuses and the audit head hash are in `docs/sandbox-evidence.md`.
+Ids and audit hashes: `docs/sandbox-evidence.md`.
 
 ## What's new (built during the hackathon)
 

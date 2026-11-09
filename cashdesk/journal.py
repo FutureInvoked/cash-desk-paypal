@@ -46,7 +46,12 @@ def journal(result: MatchResult, txns: list[Transaction]) -> list[dict]:
     by_id: dict[tuple[str, str], Transaction] = {}
     for t in txns:  # transaction ids repeat across event codes; one row per (id, event code) is enough
         by_id.setdefault((t.id, t.event_code), t)
-    outcome_of = {r.txn_id: r.outcome for r in result.transactions if r.outcome in PAYMENT_OUTCOMES}
+    outcome_of = {}
+    for r in result.transactions:
+        if r.outcome in PAYMENT_OUTCOMES:
+            # a refunded duplicate or a refunded overpayment excess was booked to customer credits
+            outcome_of[r.txn_id] = ("duplicate" if r.duplicate_of
+                                    else "overpaid" if "refunded_excess" in r.evidence else r.outcome)
     lines: list[dict] = []
 
     for r in result.transactions:
@@ -70,11 +75,12 @@ def journal(result: MatchResult, txns: list[Transaction]) -> list[dict]:
             line("paypal", debit=gross - fee, memo=f"PayPal payment {t.id}, net of fee")
             line("fees", debit=fee, memo="PayPal fee")
             n = r.invoice_number
-            if r.outcome == "overpaid" and r.difference and r.difference.amount > 0:
-                excess = r.difference.amount
+            refunded_excess = Decimal(r.evidence["refunded_excess"].split()[0]) if "refunded_excess" in r.evidence else None
+            if refunded_excess or (r.outcome == "overpaid" and r.difference and r.difference.amount > 0):
+                excess = refunded_excess or r.difference.amount
                 line("receivable", credit=gross - excess, memo=f"Payment for {n}")
                 line("credits", credit=excess, memo=f"Overpaid {n} by {_fmt(excess)}; refund or credit")
-            elif r.outcome == "duplicate":
+            elif r.outcome == "duplicate" or (r.outcome == "refunded" and r.duplicate_of):
                 line("credits", credit=gross, memo=f"Duplicate payment for {n} (of {r.duplicate_of}); refund candidate")
             elif r.outcome in ("unmatched", "currency_mismatch"):
                 why = "no invoice found" if r.outcome == "unmatched" else f"names {n} but paid in {ccy}"

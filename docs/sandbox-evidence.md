@@ -171,3 +171,27 @@ for the six subscribed event types.
   hostname, which made the quick tunnel answer 404. Giving the quick tunnel its own empty config with
   `--config` fixed it (now in the README).
 - Clean-up: webhook `4MC82235WV014724F` deleted from the sandbox app, tunnel closed, server stopped.
+
+## S7: two gaps found on real data, fixed; the owner's own partial refund (2026-11-09, ~19:15 UTC)
+
+After the S6 webhook run, the live board showed **230.00 USD unreconciled** that should have been 0:
+
+1. **A recorded payment lost its match.** Recording the 150.00 on invoice 0008 made PayPal mark it
+   `MARKED_AS_PAID`, so it was no longer open, and the 150.00 Send Money payment fell back to
+   `unmatched`. PayPal keeps the recorded payment on the invoice as an `EXTERNAL` payment whose note
+   says "PayPal transaction 6AW69090TU505332W". The matcher now links a payment to the one invoice
+   whose recorded payment names it as a whole token (`invoice.payments.transactions[].note`).
+2. **A refunded duplicate stayed an exception.** The 80.00 duplicate on 0014 was refunded on 8 Nov,
+   and its refund row points back at it through `transaction_info.paypal_reference_id`. Refunds are
+   now linked to their originals: a duplicate refunded in full becomes `refunded`, and an overpayment
+   whose excess was refunded becomes a clean `matched`. The journal books both through customer credits.
+
+After a re-sync on the fixed code: the 150.00 is matched to 0008 (paid 150.00), the duplicate reads
+"already refunded", and **Unreconciled is empty**. Tests: `tests/test_matcher_followups.py`; eval 31/31.
+
+**The owner's own approval.** At 19:13 UTC the owner approved the pending `refund_overpayment` on 0017
+in the board (q00009). PayPal refund **`8FU36371TX504383F`**, 4.50 USD, `PayPal-Request-Id:
+cashdesk-q00009`: a real partial refund of the tip, through the gate. Until Transaction Search
+reports the refund row (about 2 hours), 0017 still shows as overpaid; fix 2 then turns it into a clean match.
+
+Audit chain: 27 records, verify OK. Head `28f02c6b343265e71c696420a8affeba8b218cf1e9a1ab60b3f42a3405a8d04b`.

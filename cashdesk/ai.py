@@ -351,6 +351,12 @@ def txn_reason(r: TxnResult, txns: dict[str, Transaction]) -> str:
     ev = r.evidence
     email = ev.get("payer_info.email_address", "unknown payer")
     n = r.invoice_number
+    if r.outcome == "matched" and "refunded_excess" in ev:
+        return (f"Matched to {n}: overpaid by {ev['refunded_excess']}, and that excess was refunded "
+                f"(transaction_info.paypal_reference_id on {ev.get('refunded_by.transaction_id')}).")
+    if r.outcome == "matched" and r.rule == "invoice_ref" and "invoice.payments.transactions[].note" in ev:
+        return (f"Matched to {n}: the payment recorded on {n} names this transaction "
+                f"(invoice.payments.transactions[].note); transaction_info.transaction_amount {amt}.")
     if r.outcome == "matched" and r.rule == "invoice_ref":
         return f"Matched to {n}: {_first_ref(ev)}; transaction_info.transaction_amount {amt} equals the invoice total."
     if r.outcome == "matched" and r.rule == "amount_email":
@@ -382,6 +388,9 @@ def txn_reason(r: TxnResult, txns: dict[str, Transaction]) -> str:
     if r.outcome == "currency_mismatch":
         return (f"Names {n} ({_first_ref(ev)}) but paid in {t.amount.currency if t else '?'}; "
                 f"invoice.detail.currency_code is {ev.get('invoice.detail.currency_code')}; review manually.")
+    if r.outcome == "refunded" and r.duplicate_of:
+        return (f"Duplicate of {r.duplicate_of} for {n}, already refunded "
+                f"(transaction_info.paypal_reference_id on {ev.get('refunded_by.transaction_id')}).")
     if r.outcome == "refunded":
         return f"Paid {n}, then fully refunded (transaction_info.transaction_status V)."
     if r.outcome == "refund":
