@@ -98,9 +98,7 @@ Ids and audit hashes: `docs/sandbox-evidence.md`.
 ## What's new (built during the hackathon)
 
 All of it. The repository was started on 7 November 2026 for this hackathon. The ideas come from
-our earlier Cash Desk work: matching first, the AI only suggests, a human approves. The code is new:
-the PayPal integration, the matcher, the AI layer, the policy-gated agent, the audit chain and the
-AG Grid board.
+our earlier Cash Desk work: matching first, the AI only suggests, a human approves. The code is new.
 
 ## How we built it
 
@@ -111,8 +109,8 @@ AG Grid board.
   URL other than `api-m.sandbox.paypal.com`.
 - **AI, your choice of model:** Claude (`claude-sonnet-5-5`) through the Anthropic SDK, with a
   server-side refusal fallback, any OpenAI-compatible API, or an OpenAI model through the Codex CLI
-  signed in with a ChatGPT plan (no API key). Checked live: 31/31 on the eval, Lumen at 0.99. Either way it is one structured-output
-  request per reconciliation, with the same prompt and JSON schema. The model's links are validated and
+  signed in with a ChatGPT plan (no API key). Checked live: 31/31 on the eval, Lumen at 0.99. Every provider gets one structured-output
+  request with the same prompt and schema. The model's links are validated and
   re-run through the deterministic matcher. Payer-written notes are treated as untrusted data.
   Without an API key, a deterministic fallback keeps the whole demo working. An eval file with
   31 expected outcomes (`make eval`) keeps both paths honest.
@@ -120,7 +118,7 @@ AG Grid board.
   (`cashdesk-<item>-<random>`, reused on every retry), plus a sha256 hash-chained audit log.
 - **Frontend:** a single HTML page with AG Grid Community 36.2.0 from a CDN. There is no build step,
   and light and dark themes are supported.
-- **Process:** built test-first. About 400 tests cover every reconciliation case, every policy rule
+- **Process:** built test-first. About 490 tests cover every reconciliation case, every policy rule
   (including attempts to bypass it), the queue lifecycle and audit tampering.
 
 ## Challenges we ran into
@@ -142,6 +140,7 @@ AG Grid board.
 - A tamper-evident audit trail. Edit, delete, reorder or truncate a line, and `make audit-verify`
   names the first bad record.
 - A zero-key demo that is honest about which parts are AI and which are rules.
+- Six independent adversarial reviews. Every finding became a failing test first, then a fix.
 
 ## What we learned
 
