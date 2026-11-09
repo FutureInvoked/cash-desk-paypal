@@ -211,3 +211,7 @@ temporary folder, MCP servers off, `--output-schema` = the same JSON schema as t
 
 The configured default model (`gpt-6.1-sol`) is refused for Codex with a ChatGPT account
 ("not supported when using Codex with a ChatGPT account"), so `AI_MODEL` defaults to `gpt-6-sol`.
+
+Then on the owner's own configuration (`AI_PROVIDER=codex` in `.env`, 2026-11-09 ~20:05 UTC): the live
+board's badge reads `AI: ai (codex: gpt-6-sol)`, all 32 rows on the Reconciliation grid carry an AI
+reason with the AI tag, and the first load after a sync takes about 60 s while the model runs.
