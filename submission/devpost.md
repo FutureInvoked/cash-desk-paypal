@@ -160,4 +160,4 @@ leave the last click to a person, with enough evidence that the click takes two 
 PayPal REST APIs (OAuth2, Transaction Search, Invoicing v2, Payments v2, Webhooks v1) · Claude (Anthropic SDK) or any OpenAI-compatible LLM API ·
 AG Grid Community · Python · FastAPI · SQLite · httpx · pytest
 
-**Licence:** MIT. **Repository:** https://github.com/FutureInvoked/cash-desk-paypal · **Video:** https://www.youtube.com/watch?v=hzhK6W0vn8I
+**Licence:** MIT. **Repository:** https://github.com/FutureInvoked/cash-desk-paypal · **Video:** https://www.youtube.com/watch?v=8j6nuPuOKvo
