@@ -131,3 +131,21 @@ names, address, phone and account ids). Tests in `tests/test_parity.py`.
   (3.49% + 0.49) that the fee-short rule uses, so a payer who deducts the real fee is still caught (tested).
 - **Lag:** `last_refreshed_datetime` was 21:59:59Z when queried at 23:4xZ. Invoice payments made later
   were already on the board through the Invoicing second source; the Send Money payments were not yet visible.
+
+## S5: a memo-only match and a real overpayment refund proposal (2026-11-09)
+
+The owner sent 150.00 USD by Send Money from the buyer account to the business account, with the
+note "Lumen Bakery - Website retainer" and no invoice number. (A first attempt that day went to the
+fictional customer's address instead of the business account and never reached the desk.)
+
+- Transaction Search reported it as `6AW69090TU505332W` (`T0000`) about 2.5 hours later.
+- **Found on real data:** invoice 0008 on the sandbox has only a contact ("Maria Lumen") and no
+  business name, so the keyless fallback first left the payment unmatched. The fallback now also
+  accepts the contact's surname as a whole word in the note, still with an exact amount and exactly
+  one candidate (tests in `tests/test_ai.py`). After a re-sync, the desk suggested **0008** at 60%
+  confidence, marked for review, citing `transaction_info.transaction_note` and
+  `invoice.primary_recipients[0].billing_info.name`. A live AI model is the intended path for this case.
+- **Proposals, waiting for a person (not executed):** `record_payment` of 150.00 USD on 0008, and
+  `refund_overpayment` of 4.50 USD on 0017 (the tip), a partial refund capped at the overpaid excess.
+  Both pass the policy.
+- Audit chain after the proposals: 20 records, verify OK. Head `4745ce42e88feba02d90209a84a72be00e2fb4959a07f4a625fbaa3ece27f9d4`.

@@ -128,7 +128,8 @@ def build_payload(result: MatchResult, invoices: list[Invoice], txns: list[Trans
 
 class FallbackReconciler:
     """No-key, deterministic stand-in: links a payment when the memo names an open candidate's
-    business (or the payer shares the recipient's surname) and the amount equals what is due."""
+    business or contact (as a whole word), or the payer shares the recipient's surname, and the
+    amount equals what is due. Exactly one candidate must fit; the link is marked for review."""
 
     name = "fallback"
 
@@ -148,6 +149,10 @@ class FallbackReconciler:
                 if biz and biz in text:
                     hits.append((i, {"transaction_info.transaction_note": t.note or t.subject,
                                      "invoice.primary_recipients[0].billing_info.business_name": i.recipient_business}))
+                elif len(surname) >= 3 and re.search(rf"\b{re.escape(surname)}\b", text):
+                    # the memo names the invoice contact (e.g. "Lumen Bakery" for contact Maria Lumen)
+                    hits.append((i, {"transaction_info.transaction_note": t.note or t.subject,
+                                     "invoice.primary_recipients[0].billing_info.name": i.recipient_name}))
                 elif surname and surname == payer_surname:
                     hits.append((i, {"payer_info.payer_name": t.payer_name,
                                      "invoice.primary_recipients[0].billing_info.name": i.recipient_name}))
@@ -352,9 +357,12 @@ def txn_reason(r: TxnResult, txns: dict[str, Transaction]) -> str:
         return (f"Matched to {n}: transaction_info.transaction_amount {amt} and payer_info.email_address {email} "
                 f"equal the invoice total and recipient.")
     if r.outcome == "matched" and r.rule in ("memo_heuristic", "ai"):
-        why = ev.get("ai.reason") or ("transaction_info.transaction_note names the customer's business"
-                                      if "transaction_info.transaction_note" in ev
-                                      else "payer_info.payer_name matches the recipient")
+        why = ev.get("ai.reason") or (
+            "transaction_info.transaction_note names the customer's business"
+            if "invoice.primary_recipients[0].billing_info.business_name" in ev
+            else "transaction_info.transaction_note names the invoice contact"
+            if "transaction_info.transaction_note" in ev
+            else "payer_info.payer_name matches the recipient")
         who = "AI" if r.rule == "ai" else "heuristic"
         return (f"Suggested match to {n} ({who}, confidence {r.confidence:.0%}, review): {why}; "
                 f"payer_info.email_address {email} differs from the invoice recipient.")

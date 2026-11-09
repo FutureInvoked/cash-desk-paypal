@@ -195,3 +195,28 @@ def test_overdue_reason_says_1_day_not_1_days():
     assert "is 1 day overdue" in invoice_reason(r)
     r.days_overdue = 3
     assert "is 3 days overdue" in invoice_reason(r)
+
+
+def test_fallback_matches_a_memo_that_names_the_contact_when_the_invoice_has_no_business():
+    # Found on the live sandbox 2026-11-09: invoice 0008 has only a contact ("Maria Lumen"), and the
+    # payer's note says "Lumen Bakery - Website retainer". The fallback must still suggest it.
+    import dataclasses
+    invs, txns = data()
+    invs = [dataclasses.replace(i, recipient_business=None, recipient_name="Maria Lumen") if i.number == "NW-1021" else i
+            for i in invs]
+    txns = [dataclasses.replace(t, payer_name="John Doe", note="Lumen Bakery - Website retainer", subject=None)
+            if t.id == LUMEN else t for t in txns]
+    t = reconcile(invs, txns, as_of=AS_OF, reconciler=FallbackReconciler()).txn(LUMEN)
+    assert t.outcome == "matched" and t.invoice_number == "NW-1021" and t.rule == "memo_heuristic"
+    assert t.needs_review and t.evidence.get("invoice.primary_recipients[0].billing_info.name") == "Maria Lumen"
+    assert "names the invoice contact" in t.reason and "business" not in t.reason
+
+
+def test_fallback_contact_rule_needs_a_whole_word_and_one_candidate():
+    import dataclasses
+    invs, txns = data()
+    invs = [dataclasses.replace(i, recipient_business=None, recipient_name="Maria Lumen") if i.number == "NW-1021" else i
+            for i in invs]
+    for note in ("Illumenate retainer", "retainer"):  # substring only / no name at all
+        tx = [dataclasses.replace(t, payer_name="John Doe", note=note, subject=None) if t.id == LUMEN else t for t in txns]
+        assert reconcile(invs, tx, as_of=AS_OF, reconciler=FallbackReconciler()).txn(LUMEN).outcome == "unmatched", note

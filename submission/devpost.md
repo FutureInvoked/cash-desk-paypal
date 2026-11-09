@@ -84,6 +84,9 @@ that on 7 and 8 November 2026:
   `86940605T47984402` completed for 80.00 USD with `PayPal-Request-Id: cashdesk-q00007`, and a
   retry did not refund twice.
 - **The reminder:** an overdue invoice got a real reminder (`cashdesk-q00001`, HTTP 204).
+- **The memo match:** a 150.00 Send Money with no invoice number was suggested for invoice 0008 from
+  its note alone ("Lumen Bakery - Website retainer"), marked for review, with a record-payment
+  proposal waiting for approval.
 - **What the gate caught:** the agent also proposed reminders for four invoices the buyer had just
   paid by Send Money. Transaction Search hadn't reported those payments yet; it runs about 2 hours
   behind. The human rejected them with a note. That moment is why every action waits for a person.
