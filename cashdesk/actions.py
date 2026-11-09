@@ -51,7 +51,7 @@ def _call(method: str, path: str, body: dict | None) -> dict:
 
 def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction], *, as_of: date) -> list[Proposal]:
     inv_by_num = {i.number: i for i in invoices}
-    txn_by_id = {t.id: t for t in txns}
+    txn_by_key = {(t.id, t.event_code): t for t in txns}  # ids repeat across event codes
     out: list[Proposal] = []
 
     # 1. reminders for overdue invoices
@@ -77,7 +77,7 @@ def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction
         ))
 
     for r in result.transactions:
-        t = txn_by_id.get(r.txn_id)
+        t = txn_by_key.get((r.txn_id, r.event_code))
         if t is None:
             continue
         # 2. refund the duplicate capture
@@ -114,7 +114,6 @@ def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction
                            "note": f"Invoice for your PayPal payment {t.id} on {t.initiated.date().isoformat()}.",
                            "memo": f"Created by Cash Desk for unbilled payment {t.id}",
                            "payment_term": {"term_type": "DUE_ON_RECEIPT"}},
-                "invoicer": {"business_name": BUSINESS},
                 "primary_recipients": [{"billing_info": {"name": {"given_name": given, "surname": surname},
                                                          "email_address": t.payer_email}}],
                 "items": [{"name": item[:200], "quantity": "1", "unit_amount": t.amount.to_paypal()}],

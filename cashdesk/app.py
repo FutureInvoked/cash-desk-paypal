@@ -18,8 +18,36 @@ class Decision(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 
 
+LOCAL_HOSTS = ["localhost", "127.0.0.1", "::1", "[::1]", "testserver"]
+
+
+def allowed_hosts() -> list[str]:
+    import os
+    extra = [h.strip() for h in os.environ.get("CASHDESK_ALLOWED_HOSTS", "").split(",") if h.strip()]
+    return LOCAL_HOSTS + extra
+
+
 def create_app(desk=None) -> FastAPI:
+    from urllib.parse import urlsplit
+
+    from fastapi import Request
+    from fastapi.responses import JSONResponse
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
+
     app = FastAPI(title="Cash Desk for PayPal", version=__version__)
+    hosts = allowed_hosts()
+
+    @app.middleware("http")
+    async def same_origin_writes(request: Request, call_next):
+        # DNS rebinding / cross-site: a write must not come from another site's page
+        origin = request.headers.get("origin")
+        if request.method not in ("GET", "HEAD", "OPTIONS") and origin:
+            if (urlsplit(origin).hostname or "") not in hosts:
+                return JSONResponse({"detail": "cross-origin write refused"}, status_code=403)
+        return await call_next(request)
+
+    # a page on another hostname that resolves to 127.0.0.1 is refused before any route runs
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
     state = {"desk": desk}
 
     def d():

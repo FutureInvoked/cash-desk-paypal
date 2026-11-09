@@ -66,7 +66,7 @@ def test_partial_refund_runs_for_the_excess_amount(env):
     assert done.status == "executed"
     (call,) = c.calls
     assert call["op"] == "refund" and call["body"]["amount"] == {"currency_code": "USD", "value": "45.00"}
-    assert call["headers"]["PayPal-Request-Id"] == f"cashdesk-{item.id}"
+    assert call["headers"]["PayPal-Request-Id"] == item.request_id
 
 
 def test_refund_above_the_overpaid_excess_is_blocked(env):
@@ -80,7 +80,8 @@ def test_refund_above_the_overpaid_excess_is_blocked(env):
     q._tamper_for_test(item.id, grow)
     with pytest.raises(PolicyBlocked) as e:
         q.execute(item.id, c)
-    assert "amount_cap" in [v["code"] for v in e.value.violations]
+    # caught by the approval fingerprint (the proposal changed) or the excess cap
+    assert {"amount_cap", "integrity"} & {v["code"] for v in e.value.violations}
     assert c.calls == []
 
 

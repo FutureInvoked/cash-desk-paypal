@@ -2,7 +2,7 @@
 
 It runs again just before execution (E5), so a proposal edited after approval, a replay or a
 burst still can't get through. Rules:
-  allowlist         only the four action types, and only those enabled in config
+  allowlist         only the five action types, and only those enabled in config
   amount            a positive amount in an allowed currency
   amount_cap        per-type caps; record_payment may not exceed what the invoice still owes, and
                     refund_overpayment may not exceed what the customer overpaid

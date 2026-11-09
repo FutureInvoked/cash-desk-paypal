@@ -103,6 +103,18 @@ class SandboxPayPalClient(PayPalClient):
             return r
         self._raise(r, path)
 
+    # ------------------------------------------------------------------ approved calls
+    def execute_call(self, method, path, body, *, request_id):
+        create = method == "POST" and path == "/v2/invoicing/invoices"
+        r = self._call(method, path, json=body, request_id=request_id,
+                       prefer="return=representation" if create else None)
+        if not r.content:
+            return {"status": r.status_code}
+        b = r.json()
+        if create and "id" not in b and b.get("href"):  # minimal response: fetch the created invoice
+            b = self._call("GET", httpx.URL(b["href"]).path).json()
+        return b if isinstance(b, dict) else {"status": r.status_code, "body": b}
+
     # ------------------------------------------------------------------ webhooks
     def verify_webhook_signature(self, raw_event: str, headers, *, webhook_id: str) -> str:
         """POST /v1/notifications/verify-webhook-signature (Webhooks Management v1 spec).

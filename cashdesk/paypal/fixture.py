@@ -55,6 +55,41 @@ class FixturePayPalClient(PayPalClient):
         self._results[request_id] = res
         return res
 
+    def execute_call(self, method, path, body, *, request_id):
+        import re
+        if method == "POST" and path == "/v2/invoicing/invoices":
+            def created():
+                iid = "INV2-" + "-".join(_fake_id("", request_id, 16)[i:i + 4] for i in range(0, 16, 4))
+                doc = json.loads(json.dumps(body))
+                doc.update(id=iid, status="DRAFT")
+                doc.setdefault("detail", {})["invoice_number"] = f"NW-D{len(self._drafts) + 1:03d}"
+                self._drafts[iid] = doc
+                return {"id": iid, "status": "DRAFT", "detail": doc["detail"]}
+            return self._once("create_invoice", method, path, request_id, body, created)
+        m = re.fullmatch(r"/v2/invoicing/invoices/([^/]+)/(send|remind|payments)", path)
+        if method == "POST" and m:
+            iid, what = m.groups()
+            self._known_invoice(iid)
+            if what == "send":
+                def sent():
+                    if iid in self._drafts:
+                        self._drafts[iid]["status"] = "SENT"
+                    return {"status": 202, "href": f"https://www.sandbox.paypal.com/invoice/p/#{iid}"}
+                return self._once("send_invoice", method, path, request_id, body, sent)
+            if what == "remind":
+                return self._once("remind", method, path, request_id, body, {"status": 204})
+            return self._once("record_payment", method, path, request_id, body,
+                              {"payment_id": _fake_id("EXTR-", request_id, 16)})
+        m = re.fullmatch(r"/v2/payments/captures/([^/]+)/refund", path)
+        if method == "POST" and m:
+            cid = m.group(1)
+            if not any(d["transaction_info"]["transaction_id"] == cid for d in self._txns):
+                raise KeyError(f"no capture {cid}")
+            return self._once("refund", method, path, request_id, body,
+                              {"id": _fake_id("", "refund:" + request_id), "status": "COMPLETED",
+                               "amount": (body or {}).get("amount")})
+        raise KeyError(f"no simulated endpoint for {method} {path}")
+
     def send_reminder(self, invoice_id, *, note, request_id, subject=None):
         self._known_invoice(invoice_id)
         body = {"note": note, "send_to_invoicer": True, "send_to_recipient": True}

@@ -13,11 +13,13 @@ executed item returns its stored result and is never sent twice.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import secrets
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Callable
@@ -48,7 +50,9 @@ create table if not exists queue_items (
     result text,
     error text,
     first_by text,
-    first_at text
+    first_at text,
+    approved_hash text,
+    started_at text
 );
 """
 # queue status -> what the policy's history sees
@@ -80,6 +84,23 @@ def proposal_from_dict(d: dict) -> Proposal:
     return Proposal(**d)
 
 
+def _person(name: str | None) -> str:
+    """Compare approver names as people would read them: NFKC (fullwidth -> ASCII), no invisible
+    format characters (zero-width spaces), no spaces, case-folded."""
+    import unicodedata
+    n = unicodedata.normalize("NFKC", name or "")
+    n = "".join(ch for ch in n if unicodedata.category(ch) not in ("Cf", "Cc", "Zs") and not ch.isspace())
+    return n.casefold()
+
+
+def proposal_hash(p: Proposal) -> str:
+    """Fingerprint of everything that would run; taken at approval, checked again before running."""
+    return hashlib.sha256(json.dumps(proposal_to_dict(p), sort_keys=True, default=str).encode()).hexdigest()
+
+
+STALE_EXECUTING_SECONDS = 300  # a run that crashed mid-call may be retried after this
+
+
 def _iso(dt: datetime | None) -> str | None:
     return dt.astimezone(timezone.utc).isoformat() if dt else None
 
@@ -106,6 +127,7 @@ class QueueItem:
     first_by: str | None = None
     first_at: datetime | None = None
     approvals_needed: int = 1
+    approved_hash: str | None = None
 
     def to_dict(self) -> dict:
         p = proposal_to_dict(self.proposal)
@@ -128,7 +150,7 @@ class ApprovalQueue:
         with self._conn() as con:
             con.executescript(SCHEMA)
             cols = {r[1] for r in con.execute("pragma table_info(queue_items)")}
-            for col in ("first_by", "first_at"):  # databases created before the two-person rule
+            for col in ("first_by", "first_at", "approved_hash", "started_at"):  # older databases
                 if col not in cols:
                     con.execute(f"alter table queue_items add column {col} text")
 
@@ -151,7 +173,7 @@ class ApprovalQueue:
             decided_by=r["decided_by"], note=r["note"], request_id=r["request_id"],
             executed_at=_dt(r["executed_at"]), result=json.loads(r["result"]) if r["result"] else None,
             error=r["error"], invoice_due=Money(Decimal(due["value"]), due["currency_code"]) if due else None,
-            first_by=r["first_by"], first_at=_dt(r["first_at"]))
+            first_by=r["first_by"], first_at=_dt(r["first_at"]), approved_hash=r["approved_hash"])
 
     def get(self, item_id: str) -> QueueItem:
         with self._conn() as con:
@@ -209,11 +231,13 @@ class ApprovalQueue:
         with self._conn() as con:
             seq = con.execute("select coalesce(max(seq), 0) + 1 from queue_items").fetchone()[0]
             item_id = f"q{seq:05d}"
+            # unique across databases and reinstalls: q00001 restarts, the random part doesn't
+            request_id = f"cashdesk-{item_id}-{secrets.token_hex(4)}"
             con.execute(
                 """insert into queue_items (id, proposal_id, intent_key, type, target, proposal, invoice_due,
-                                            status, policy, created_at) values (?,?,?,?,?,?,?,?,?,?)""",
+                                            status, policy, created_at, request_id) values (?,?,?,?,?,?,?,?,?,?,?)""",
                 (item_id, p.id, p.intent_key, p.type, p.target, json.dumps(proposal_to_dict(p)),
-                 json.dumps(invoice_due.to_paypal()) if invoice_due else None, "pending", "{}", _iso(now)))
+                 json.dumps(invoice_due.to_paypal()) if invoice_due else None, "pending", "{}", _iso(now), request_id))
         item = self.get(item_id)
         d = self._check(item)
         item = self._update(item_id, status="pending" if d.allowed else "blocked", policy=json.dumps(d.to_dict()))
@@ -228,7 +252,14 @@ class ApprovalQueue:
 
     @staticmethod
     def _same_person(a: str | None, b: str | None) -> bool:
-        return (a or "").strip().casefold() == (b or "").strip().casefold()
+        return _person(a) == _person(b)
+
+    def _tampered(self, item: QueueItem) -> None:
+        """Block when the stored proposal differs from what was approved."""
+        from .policy import Decision
+        if item.approved_hash and proposal_hash(item.proposal) != item.approved_hash:
+            self._block(item, Decision(False, [{"code": "integrity",
+                                                "message": "the proposal changed after it was approved"}]))
 
     def approve(self, item_id: str, *, by: str) -> QueueItem:
         item = self.get(item_id)
@@ -237,16 +268,20 @@ class ApprovalQueue:
         if item.status == "awaiting_second" and self._same_person(by, item.first_by):
             raise NotExecutable(f"{item_id} was first approved by {item.first_by}; "
                                 f"a different person must give the second approval")
+        if item.status == "awaiting_second":
+            self._tampered(item)  # the second approver must approve what the first one saw
         d = self._check(item)
         if not d.allowed:
             self._block(item, d)
         now = _iso(self.clock())
+        h = item.approved_hash or proposal_hash(item.proposal)
         if item.status == "pending" and item.approvals_needed > 1:
             item = self._update(item_id, status="awaiting_second", first_by=by, first_at=now,
-                                policy=json.dumps(d.to_dict()))
+                                policy=json.dumps(d.to_dict()), approved_hash=h)
             self._emit("first_approval", item, by=by)
             return item
-        item = self._update(item_id, status="approved", decided_at=now, decided_by=by, policy=json.dumps(d.to_dict()))
+        item = self._update(item_id, status="approved", decided_at=now, decided_by=by, policy=json.dumps(d.to_dict()),
+                            approved_hash=h)
         self._emit("approved", item, by=by, **({"first_by": item.first_by} if item.first_by else {}))
         return item
 
@@ -276,11 +311,26 @@ class ApprovalQueue:
         if item.approvals_needed > 1 and (not item.first_by or not item.decided_by
                                           or self._same_person(item.first_by, item.decided_by)):
             raise NotExecutable(f"{item_id} needs two different approvers before it can run")
-        request_id = f"cashdesk-{item.id}"
+        if not item.approved_hash:
+            raise NotExecutable(f"{item_id} has no approval fingerprint; approve it again")
+        self._tampered(item)
+        request_id = item.request_id or f"cashdesk-{item.id}-{secrets.token_hex(4)}"
         d = self._check(item, request_id=request_id)
         if not d.allowed:
             self._block(item, d)
-        item = self._update(item_id, status="executing", request_id=request_id)
+        # compare-and-set: of two simultaneous runs, exactly one goes on
+        now = self.clock()
+        stale = _iso(now - timedelta(seconds=STALE_EXECUTING_SECONDS))
+        with self._conn() as con:
+            cur = con.execute(
+                """update queue_items set status = 'executing', request_id = ?, started_at = ?
+                   where id = ? and (status in ('approved', 'failed')
+                                     or (status = 'executing' and (started_at is null or started_at < ?)))""",
+                (request_id, _iso(now), item_id, stale))
+            won = cur.rowcount == 1
+        if not won:
+            raise NotExecutable(f"{item_id} is already running")
+        item = self.get(item_id)
         self._emit("executing", item, request_id=request_id, api_calls=item.proposal.api_calls)
         try:
             result = self._dispatch(item.proposal, client, request_id)
@@ -295,26 +345,21 @@ class ApprovalQueue:
 
     @staticmethod
     def _dispatch(p: Proposal, client: PayPalClient, rid: str) -> dict:
-        body = p.api_calls[0]["body"] or {}
-        if p.type == "send_reminder":
-            return client.send_reminder(p.target, note=body.get("note", ""), subject=body.get("subject"),
-                                        request_id=rid)
-        if p.type in ("refund_capture", "refund_overpayment"):
-            return client.refund_capture(p.target, p.amount, request_id=rid,
-                                         note_to_payer=body.get("note_to_payer", ""))
-        if p.type == "record_payment":
-            return client.record_payment(p.target, p.amount, payment_date=date.fromisoformat(body["payment_date"]),
-                                         method=body.get("method", "PAYPAL"), note=body.get("note", ""),
-                                         request_id=rid)
-        if p.type == "create_draft_invoice":
-            rec = body["primary_recipients"][0]["billing_info"]
-            name = " ".join(x for x in (rec.get("name", {}).get("given_name"), rec.get("name", {}).get("surname")) if x)
-            inv = client.create_draft_invoice(recipient_email=rec["email_address"], recipient_name=name,
-                                              item=body["items"][0]["name"], amount=p.amount,
-                                              note=body.get("detail", {}).get("note"), request_id=f"{rid}-create")
-            sent = client.send_invoice(inv.id, request_id=f"{rid}-send")
-            return {"invoice_id": inv.id, "invoice_number": inv.number, "send": sent}
-        raise NotExecutable(f"unknown action type {p.type}")
+        """Send the proposal's stored calls exactly as approved. A two-call proposal (create, then
+        send an invoice) fills the new invoice id into the second path and gets -create/-send ids."""
+        calls = p.api_calls
+        if len(calls) == 1:
+            c = calls[0]
+            return client.execute_call(c["method"], c["path"], c["body"], request_id=rid)
+        created = client.execute_call(calls[0]["method"], calls[0]["path"], calls[0]["body"], request_id=f"{rid}-create")
+        new_id = created.get("id") if isinstance(created, dict) else None
+        if not new_id:
+            raise RuntimeError("PayPal did not return the new invoice id")
+        second = calls[1]
+        sent = client.execute_call(second["method"], second["path"].replace("{new_invoice_id}", new_id),
+                                   second["body"], request_id=f"{rid}-send")
+        return {"invoice_id": new_id, "invoice_number": (created.get("detail") or {}).get("invoice_number"),
+                "send": sent}
 
     # test hook: simulate someone editing the stored proposal after approval
     def _tamper_for_test(self, item_id: str, fn) -> None:

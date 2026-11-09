@@ -132,10 +132,10 @@ def test_approved_refund_executes_with_idempotency_key(env):
     approve_refund(q, item.id)
     done = q.execute(item.id, c)
     assert done.status == "executed" and done.result["status"] == "COMPLETED"
-    assert done.request_id == f"cashdesk-{item.id}"
+    assert done.request_id == item.request_id
     (call,) = c.calls
     assert call["path"] == f"/v2/payments/captures/{txn_id('NW-1015-dup')}/refund"
-    assert call["headers"]["PayPal-Request-Id"] == f"cashdesk-{item.id}"
+    assert call["headers"]["PayPal-Request-Id"] == item.request_id
     assert call["body"]["amount"] == {"currency_code": "USD", "value": "800.00"}
 
 
@@ -154,14 +154,14 @@ def test_crash_mid_execution_retries_with_the_same_request_id(env):
     approve_refund(q, item.id)
 
     class Boom(FixturePayPalClient):
-        def refund_capture(self, *a, **kw):
+        def execute_call(self, *a, **kw):  # the executor sends approved calls only through this
             raise ConnectionError("network dropped after send")
 
     with pytest.raises(ConnectionError):
         q.execute(item.id, Boom())
     assert q.get(item.id).status == "failed"
     done = q.execute(item.id, c)
-    assert done.status == "executed" and c.calls[0]["headers"]["PayPal-Request-Id"] == f"cashdesk-{item.id}"
+    assert done.status == "executed" and c.calls[0]["headers"]["PayPal-Request-Id"] == item.request_id
 
 
 def test_duplicate_intent_is_blocked_at_enqueue(env):
@@ -219,7 +219,7 @@ def test_draft_invoice_creates_then_sends(env):
     done = q.execute(item.id, c)
     assert [x["op"] for x in c.calls] == ["create_invoice", "send_invoice"]
     assert done.result["invoice_id"].startswith("INV2-")
-    assert c.calls[0]["headers"]["PayPal-Request-Id"] == f"cashdesk-{item.id}-create"
+    assert c.calls[0]["headers"]["PayPal-Request-Id"] == f"{item.request_id}-create"
 
 
 def test_listing_and_decisions_are_recorded(env):

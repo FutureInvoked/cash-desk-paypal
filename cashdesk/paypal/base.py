@@ -48,6 +48,11 @@ class PayPalClient(ABC):
     @abstractmethod
     def refund_capture(self, capture_id: str, amount: Money, *, request_id: str, note_to_payer: str) -> dict: ...
 
+    def execute_call(self, method: str, path: str, body: dict | None, *, request_id: str) -> dict:
+        """Run one approved API call exactly as stored in the proposal (method, path, JSON body).
+        The approval queue executes only through this, so the dialog shows what is sent."""
+        raise NotImplementedError
+
     def verify_webhook_signature(self, raw_event: str, headers, *, webhook_id: str) -> str:
         """Ask PayPal whether a webhook delivery is genuine: "SUCCESS" or "FAILURE".
         Clients that can't ask PayPal (the fixture client) fail closed."""

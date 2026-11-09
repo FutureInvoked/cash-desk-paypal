@@ -18,6 +18,7 @@ Both providers go through the same validation below.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -166,7 +167,7 @@ class FallbackReconciler:
                 biz = (i.recipient_business or "").lower()
                 surname = (i.recipient_name or "").split(" ")[-1].lower()
                 payer_surname = (t.payer_name or "").split(" ")[-1].lower()
-                if biz and biz in text:
+                if biz and re.search(rf"(?<![a-z0-9]){re.escape(biz)}(?![a-z0-9])", text):
                     hits.append((i, {"transaction_info.transaction_note": t.note or t.subject,
                                      "invoice.primary_recipients[0].billing_info.business_name": i.recipient_business}))
                 elif len(surname) >= 3 and re.search(rf"\b{re.escape(surname)}\b", text):
@@ -219,6 +220,8 @@ class ClaudeReconciler:
             out = json.loads(text)
         except (StopIteration, json.JSONDecodeError):
             return self._fallback(result, invoices, txns, "fallback (invalid AI output)")
+        if not isinstance(out, dict):
+            return self._fallback(result, invoices, txns, "fallback (invalid AI output)")
         return self._validate(out, result, invoices, txns, payload)
 
     def _fallback(self, result, invoices, txns, status):
@@ -249,6 +252,8 @@ def validate(out, result, invoices, txns, payload, model: str) -> Suggestions:
             conf = float(res.get("confidence") or 0)
         except (TypeError, ValueError):
             continue
+        if not math.isfinite(conf) or not 0 <= conf <= 1:
+            continue  # NaN compares false with everything, so it would skip the review threshold
         if not t or not num or conf < MIN_CONFIDENCE:
             continue
         if num not in {i.number for i in candidates(result, invoices, t)}:

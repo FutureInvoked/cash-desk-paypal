@@ -29,7 +29,11 @@ def create_webhook_app(desk=None) -> FastAPI:
     @app.post("/webhooks/paypal")
     async def paypal(request: Request) -> JSONResponse:
         # read at most MAX_BODY + 1 bytes, whatever Content-Length says (chunked bodies have none)
-        if int(request.headers.get("content-length") or 0) > MAX_BODY:
+        try:
+            declared = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            return JSONResponse({"status": "rejected", "error": "bad Content-Length"}, status_code=400)
+        if declared > MAX_BODY:
             return JSONResponse({"status": "rejected", "error": "body too large"}, status_code=413)
         buf = bytearray()
         async for chunk in request.stream():
@@ -37,7 +41,9 @@ def create_webhook_app(desk=None) -> FastAPI:
             if len(buf) > MAX_BODY:
                 return JSONResponse({"status": "rejected", "error": "body too large"}, status_code=413)
         # PayPal verify and the re-sync are blocking network calls: keep them off the event loop
-        status, body = await run_in_threadpool(handle, d(), bytes(buf), dict(request.headers))
+        # behind a Cloudflare tunnel every request comes from 127.0.0.1; Cloudflare sets the real client
+        source = request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "-")
+        status, body = await run_in_threadpool(handle, d(), bytes(buf), dict(request.headers), source=source)
         return JSONResponse(body, status_code=status)
 
     @app.get("/webhooks/health")

@@ -476,7 +476,8 @@ const approvalCols = [
 ];
 
 function callsFor(it) {
-  const rid = `cashdesk-${it.id}`, calls = it.proposal.api_calls;
+  // the id stored when the action was queued: exactly what the server sends as PayPal-Request-Id
+  const rid = it.request_id || `cashdesk-${it.id}`, calls = it.proposal.api_calls;
   return calls.map((c, n) => ({ ...c, rid: calls.length > 1 ? `${rid}-${n === 0 ? "create" : "send"}` : rid }));
 }
 

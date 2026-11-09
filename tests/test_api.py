@@ -80,7 +80,7 @@ def test_approve_then_execute(api, desk):
     assert r.status_code == 200 and r.json()["status"] == "approved"
     r = api.post(f"/api/approvals/{item['id']}/execute")
     assert r.status_code == 200 and r.json()["status"] == "executed"
-    assert r.json()["request_id"] == f"cashdesk-{item['id']}"
+    assert r.json()["request_id"] == item["request_id"]
     assert desk.client.calls[0]["op"] == "refund"
 
 

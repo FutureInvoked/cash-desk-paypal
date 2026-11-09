@@ -141,7 +141,7 @@ def test_queue_events_land_in_the_audit_log(tmp_path):
     recs = [json.loads(x) for x in lines(audit.path)]
     assert [x["event"] for x in recs] == ["enqueued", "first_approval", "approved", "executing", "executed"]
     assert recs[1]["by"] == "owner" and recs[2]["by"] == "bookkeeper"
-    assert recs[3]["request_id"] == f"cashdesk-{item.id}" and recs[3]["api_calls"][0]["path"].endswith("/refund")
+    assert recs[3]["request_id"] == item.request_id and recs[3]["api_calls"][0]["path"].endswith("/refund")
     assert verify(audit.path).ok
 
 

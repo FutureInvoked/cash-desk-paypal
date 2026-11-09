@@ -220,3 +220,14 @@ def test_fallback_contact_rule_needs_a_whole_word_and_one_candidate():
     for note in ("Illumenate retainer", "retainer"):  # substring only / no name at all
         tx = [dataclasses.replace(t, payer_name="John Doe", note=note, subject=None) if t.id == LUMEN else t for t in txns]
         assert reconcile(invs, tx, as_of=AS_OF, reconciler=FallbackReconciler()).txn(LUMEN).outcome == "unmatched", note
+
+
+def test_fallback_business_name_must_be_a_whole_phrase():
+    # second review: the docstring said whole word, the code matched any substring
+    import dataclasses
+    invs, txns = data()
+    txns = [dataclasses.replace(t, note="Illumen Bakery Supplies - retainer", subject=None, payer_name="John Doe")
+            if t.id == LUMEN else t for t in txns]
+    invs = [dataclasses.replace(i, recipient_business="Lumen Bakery", recipient_name="Maria Smith")
+            if i.number == "NW-1021" else i for i in invs]
+    assert reconcile(invs, txns, as_of=AS_OF, reconciler=FallbackReconciler()).txn(LUMEN).outcome == "unmatched"

@@ -100,6 +100,11 @@ decided were skipped. q00007 was a refund with these details:
 `POST /v2/payments/captures/6FK36409J7161034V/refund`, body amount 80.00 USD, note to the payer and
 `invoice_id: 0014`. The policy check passed.
 
+**Correction (2026-11-09, second review):** the approve dialog showed that body, but the client at the
+time sent only the amount and the note to the payer; `invoice_id` was never sent. Since then the
+executor sends each proposal's stored calls exactly as shown (`execute_call`), so the dialog and the
+request can no longer differ.
+
 | queue item | action | decision | PayPal result |
 |---|---|---|---|
 | q00007 | refund 80.00 USD of transaction 6FK36409J7161034V (the duplicate) | approved, executed | **refund 86940605T47984402, status COMPLETED, 80.00 USD**, `PayPal-Request-Id: cashdesk-q00007` |
@@ -110,7 +115,6 @@ decided were skipped. q00007 was a refund with these details:
 - Findings:
   - A Send Money payment (`T0000`) can be refunded through the Payments v2 capture refund endpoint,
     using its transaction id.
-  - PayPal accepted `invoice_id` in the refund body but does not echo it in the refund resource.
   - The invoice-level reason also said "1 days overdue". Fixed (test added).
 
 ## S4b: Transaction Search parity (2026-11-08 00:5x CET)

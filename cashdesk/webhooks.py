@@ -51,8 +51,12 @@ create table if not exists webhook_events (
 
 
 def _resource_id(ev: dict) -> str | None:
-    r = ev.get("resource") or {}
-    return r.get("id") or (r.get("invoice") or {}).get("id")
+    r = ev.get("resource")
+    if not isinstance(r, dict):
+        return None
+    inv = r.get("invoice")
+    rid = r.get("id") or (inv.get("id") if isinstance(inv, dict) else None)
+    return rid[:MAX_ID] if isinstance(rid, str) else None
 
 
 class WebhookInbox:
@@ -83,26 +87,30 @@ class WebhookInbox:
 
 
 class RejectLimiter:
-    """Counts unverified deliveries; past the limit, answer 429 without calling PayPal or writing audit."""
+    """Counts unverified deliveries per source; past the limit, that source gets 429 without a PayPal
+    call or an audit write. Per source, so a flood from one address can't lock out PayPal's own."""
 
     def __init__(self, limit: int = REJECT_LIMIT, window: float = REJECT_WINDOW, clock=time.monotonic):
         self.limit, self.window, self.clock = limit, window, clock
-        self.hits: deque[float] = deque()
+        self.hits: dict[str, deque[float]] = {}
         self.lock = threading.Lock()
 
-    def blocked(self) -> bool:
+    def blocked(self, source: str = "-") -> bool:
         with self.lock:
             now = self.clock()
-            while self.hits and now - self.hits[0] > self.window:
-                self.hits.popleft()
-            return len(self.hits) >= self.limit
+            q = self.hits.get(source)
+            while q and now - q[0] > self.window:
+                q.popleft()
+            if len(self.hits) > 10_000:  # bound memory: forget sources with nothing recent
+                self.hits = {k: v for k, v in self.hits.items() if v}
+            return bool(q) and len(q) >= self.limit
 
-    def add(self) -> None:
+    def add(self, source: str = "-") -> None:
         with self.lock:
-            self.hits.append(self.clock())
+            self.hits.setdefault(source, deque()).append(self.clock())
 
 
-def handle(desk, raw: bytes, headers, limiter: RejectLimiter | None = None) -> tuple[int, dict]:
+def handle(desk, raw: bytes, headers, limiter: RejectLimiter | None = None, source: str = "-") -> tuple[int, dict]:
     from .paypal.sandbox import PayPalError
 
     if limiter is None:
@@ -130,7 +138,7 @@ def handle(desk, raw: bytes, headers, limiter: RejectLimiter | None = None) -> t
     if not webhook_id:
         return 503, {"status": "rejected", "error": "PAYPAL_WEBHOOK_ID is not configured"}
 
-    if limiter.blocked():
+    if limiter.blocked(source):
         return 429, {"status": "rejected", "error": "too many unverified events; try later"}
 
     base = {"event_id": ev["id"], "event_type": ev["event_type"], "resource_id": _resource_id(ev),
@@ -140,7 +148,7 @@ def handle(desk, raw: bytes, headers, limiter: RejectLimiter | None = None) -> t
     except PayPalError as e:
         return 502, {"status": "retry", "error": f"PayPal verify failed: HTTP {e.status}"}
     if status != "SUCCESS":
-        limiter.add()
+        limiter.add(source)
         desk.audit.append({"event": "webhook_rejected", **base, "verification": status})
         return 400, {"status": "rejected", "error": "signature not verified by PayPal"}
 

@@ -33,7 +33,7 @@ EXCEPTIONS = {"partial", "overpaid", "duplicate", "unmatched", "fee_mismatch", "
 
 OPEN_STATUSES = {"SENT", "UNPAID", "PARTIALLY_PAID", "PAYMENT_PENDING", "SCHEDULED"}
 PAID_STATUSES = {"PAID", "MARKED_AS_PAID", "PAID_EXTERNAL"}
-REFUND_CODES = {"T1107"}
+REFUND_CODES = {"T1107", "T1106"}  # refund, payment reversal (docs/paypal-api-notes.md)
 FEE_RATE = {"USD": (Decimal("0.0349"), Decimal("0.49")), "EUR": (Decimal("0.0349"), Decimal("0.39"))}
 FEE_SLACK = Decimal("0.05")
 DUPLICATE_WINDOW = timedelta(hours=24)
@@ -208,7 +208,8 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
         ev = base_ev(t)
         if t.event_code in REFUND_CODES:
             inv, rev = _find_by_reference(t, invoices)
-            r = res(t, "refund", rule="invoice_ref" if inv else None, evidence=ev | rev |
+            kind = {"S": "refund", "P": "pending"}.get(t.status, "ignored")  # denied/reversed refunds moved no money
+            r = res(t, kind, rule="invoice_ref" if inv else None, evidence=ev | rev |
                     ({"transaction_info.paypal_reference_id": t.reference_id} if t.reference_id else {}))
             if inv:
                 r.invoice_id, r.invoice_number = inv.id, inv.number
@@ -280,82 +281,84 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
                                    "expected_paypal_fee": str(paypal_fee(inv.total))})
             applied.setdefault(inv.id, []).append((t, r))
             continue
+        twins = [(i, x) for i in invoices if i.total.currency == t.amount.currency
+                 for x, _ in applied.get(i.id, []) if x.amount == t.amount
+                 and _same_email(x.payer_email, t.payer_email) and abs(x.initiated - t.initiated) <= DUPLICATE_WINDOW]
+        if len({i.id for i, _ in twins}) == 1:  # same payer paid the same amount for one invoice: a duplicate pair
+            inv, twin = twins[0]
+            r = res(t, "matched", rule="amount_email", invoice_id=inv.id, invoice_number=inv.number,
+                    evidence=ev | {"same_payer_payment.transaction_id": twin.id, "invoice.amount": str(inv.total),
+                                   "invoice.detail.invoice_number": inv.number})
+            applied[inv.id].append((t, r))
+            continue
         res(t, "unmatched", candidates=sorted(i.number for i in within or same_payer), evidence=ev)
 
-    # ---- pass 3: per-invoice running totals => matched / partial / overpaid / duplicate ----
-    for inv_id, pays in applied.items():
-        inv = by_id[inv_id]
-        running = Decimal("0")
-        for t, r in pays:
-            if r.outcome == "fee_mismatch":
-                r.difference = t.amount - inv.total
-                running += t.amount.amount
-                continue
-            earlier_same = [x for x, xr in pays if x is not t and x.initiated <= t.initiated
-                            and xr.outcome in ("matched", "partial", "overpaid") and x.amount == t.amount
-                            and _same_email(x.payer_email, t.payer_email)
-                            and t.initiated - x.initiated <= DUPLICATE_WINDOW]
-            if running >= inv.total.amount and earlier_same:
-                r.outcome, r.duplicate_of = "duplicate", earlier_same[-1].id
-                r.difference = t.amount
-                r.evidence["duplicate_of.transaction_id"] = earlier_same[-1].id
-                continue
-            before = running
-            running += t.amount.amount
-            r.difference = Money(running - inv.total.amount, inv.total.currency)
-            if running == inv.total.amount:
-                r.outcome = "matched"
-            elif running < inv.total.amount:
-                short = inv.total.amount - running
-                r.outcome = "fee_mismatch" if before == 0 and short <= paypal_fee(inv.total).amount + FEE_SLACK \
-                    and not inv.raw.get("configuration", {}).get("partial_payment", {}).get("allow_partial_payment") \
-                    else "partial"
-            else:
-                r.outcome = "overpaid"
-                r.evidence["overpaid_by"] = str(r.difference)
-
     # ---- refunds that point back at a payment (transaction_info.paypal_reference_id) ----
+    # Applied before duplicates are decided: a refunded first payment no longer covers the invoice.
     refunded_amt: dict[str, Decimal] = {}
     refund_ids: dict[str, list[str]] = {}
     for t in txns:
         if t.event_code in REFUND_CODES and t.status == "S" and t.reference_id:
             refunded_amt[t.reference_id] = refunded_amt.get(t.reference_id, Decimal("0")) + abs(t.amount.amount)
             refund_ids.setdefault(t.reference_id, []).append(t.id)
-    # what each payment still counts for after refunds, and invoices whose payments were all refunded
-    net_less: dict[str, Decimal] = {}
-    refunded_invoice: set[str] = set()
-    for t in txns:
-        r = results.get(t.key)
-        back = refunded_amt.get(t.id)
-        if r is None or not back or r.outcome not in ("matched", "partial", "fee_mismatch", "overpaid", "duplicate"):
-            continue
-        back = min(back, t.amount.amount)
-        ccy = t.amount.currency
-        r.evidence["refunded_by.transaction_id"] = refund_ids[t.id][-1]
-        if r.outcome == "duplicate":  # a duplicate never counts toward the invoice
+
+    # ---- pass 3: per-invoice running totals, net of refunds, in time order ----
+    net_less: dict[str, Decimal] = {}     # what a refund took back from a payment
+    refunded_invoice: set[str] = set()    # invoices with a fully refunded payment
+    for inv_id, pays in applied.items():
+        pays.sort(key=lambda p: (p[0].initiated, p[0].id))
+        inv = by_id[inv_id]
+        total, ccy = inv.total.amount, inv.total.currency
+        running = Decimal("0")
+        for t, r in pays:
+            back = min(refunded_amt.get(t.id, Decimal("0")), t.amount.amount)
+            if back:
+                r.evidence["refunded_by.transaction_id"] = refund_ids[t.id][-1]
+            earlier_same = [x for x, xr in pays if x is not t and (x.initiated, x.id) < (t.initiated, t.id)
+                            and xr.outcome in ("matched", "partial", "overpaid") and x.amount == t.amount
+                            and _same_email(x.payer_email, t.payer_email)
+                            and t.initiated - x.initiated <= DUPLICATE_WINDOW]
+            if running >= total and earlier_same:
+                r.duplicate_of = earlier_same[-1].id
+                r.evidence["duplicate_of.transaction_id"] = earlier_same[-1].id
+                if back >= t.amount.amount:
+                    r.outcome, r.difference = "refunded", Money(Decimal("0"), ccy)
+                else:
+                    r.outcome, r.difference = "duplicate", Money(t.amount.amount - back, ccy)
+                    if back:
+                        r.evidence["refunded_amount"] = str(Money(back, ccy))
+                continue
+            gross_excess = min(running + t.amount.amount - total, t.amount.amount)
+            if gross_excess > 0:
+                r.evidence["overpaid_by"] = str(Money(gross_excess, ccy))  # the books keep the original split
             if back >= t.amount.amount:
-                r.outcome = "refunded"
-            else:
+                r.outcome, r.difference = "refunded", None
+                net_less[t.id] = t.amount.amount
+                refunded_invoice.add(inv_id)
+                continue
+            if back:
+                net_less[t.id] = back
+            fee_rule = r.outcome == "fee_mismatch"
+            before = running
+            running += t.amount.amount - back
+            r.difference = Money(running - total, ccy)
+            if back and gross_excess > 0 and back == gross_excess:
+                r.outcome = "matched"
+                r.evidence["refunded_excess"] = str(Money(back, ccy))
+                continue
+            if back:
                 r.evidence["refunded_amount"] = str(Money(back, ccy))
-            continue
-        excess = r.difference.amount if r.outcome == "overpaid" and r.difference else Decimal("0")
-        net_less[t.id] = back
-        if back >= t.amount.amount:
-            r.outcome = "refunded"
-            if r.invoice_id:
-                refunded_invoice.add(r.invoice_id)
-        elif excess and back == excess:
-            r.outcome = "matched"
-            r.evidence["refunded_excess"] = str(r.difference)
-            r.difference = Money(Decimal("0"), ccy)
-        else:
-            r.evidence["refunded_amount"] = str(Money(back, ccy))
-            if r.difference is not None:
-                r.difference = Money(r.difference.amount - back, ccy)
-            if excess and back < excess:
-                pass  # still overpaid, by what is left of the excess
+            if fee_rule and not back:
+                continue  # matched by the fee rule (rule 3): stays fee_mismatch
+            if running == total:
+                r.outcome = "matched"
+            elif running < total:
+                short = total - running
+                r.outcome = "fee_mismatch" if before == 0 and not back and short <= paypal_fee(inv.total).amount + FEE_SLACK \
+                    and not inv.raw.get("configuration", {}).get("partial_payment", {}).get("allow_partial_payment") \
+                    else "partial"
             else:
-                r.outcome = "partial"
+                r.outcome = "overpaid"
 
     # ---- invoices ----
     inv_results: list[InvoiceResult] = []

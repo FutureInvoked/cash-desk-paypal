@@ -133,3 +133,10 @@ def test_overpayment_refund_and_journal_export_are_on_the_board():
     assert 'refund_overpayment: "Refund overpayment"' in HTML
     assert 'id="export-journal"' in HTML and 'href="/api/export/journal.csv"' in HTML
 
+
+
+def test_dialog_shows_the_stored_request_id():
+    # second review (H3) + browser check: the dialog must show the id the server will send
+    calls = HTML[HTML.index("function callsFor"):]
+    calls = calls[:calls.index("\n}\n")]
+    assert "it.request_id" in calls
