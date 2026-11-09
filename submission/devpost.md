@@ -84,6 +84,13 @@ that on 7 and 8 November 2026:
 
 Request ids, statuses and the audit head hash are in `docs/sandbox-evidence.md`.
 
+## What's new (built during the hackathon)
+
+All of it. The repository was started on 7 November 2026 for this hackathon. The ideas come from
+our earlier Cash Desk work: matching first, the AI only suggests, a human approves. The code is new:
+the PayPal integration, the matcher, the AI layer, the policy-gated agent, the audit chain and the
+AG Grid board.
+
 ## How we built it
 
 - **Backend:** Python 3.11, FastAPI, `httpx`, SQLite. One `PayPalClient` interface with a
@@ -142,4 +149,4 @@ leave the last click to a person, with enough evidence that the click takes two 
 PayPal REST APIs (OAuth2, Transaction Search, Invoicing v2, Payments v2) · Claude (Anthropic SDK) or any OpenAI-compatible LLM API ·
 AG Grid Community · Python · FastAPI · SQLite · httpx · pytest
 
-**Licence:** MIT. **Repository:** (link added at submission).
+**Licence:** MIT. **Repository:** https://github.com/FutureInvoked/cash-desk-paypal · **Video:** https://www.youtube.com/watch?v=grsDzN1YzL0
