@@ -31,7 +31,7 @@ Cash Desk pulls PayPal transactions (Transaction Search) and invoices (Invoicing
 - **Explains** every match and exception in one sentence that cites the PayPal fields it relies on,
   for example "Short by 17.94 on NW-1020, which equals PayPal's fee…".
 - **Resolves** what rules can't. Example: a customer paid from a personal email, and only the memo
-  "Lumen Bakery - October retainer" links the payment to the invoice. Claude may pick from the
+  "Lumen Bakery - October retainer" links the payment to the invoice. The AI may pick from the
   candidate invoices it is shown, and the match is flagged for review.
 - **Proposes actions:**
   - send a payment reminder for an overdue invoice;
@@ -91,8 +91,10 @@ Request ids, statuses and the audit head hash are in `docs/sandbox-evidence.md`.
 - **PayPal integration:** endpoints and shapes come straight from PayPal's official OpenAPI specs.
   A test walks every key in the sample data against the official schemas. The app refuses any base
   URL other than `api-m.sandbox.paypal.com`.
-- **AI:** Claude (`claude-sonnet-5-5`) through the Anthropic SDK. It makes one structured-output
-  request per reconciliation, with a server-side refusal fallback. Claude's links are validated and
+- **AI, your choice of model:** Claude (`claude-sonnet-5-5`) through the Anthropic SDK, with a
+  server-side refusal fallback, or any OpenAI-compatible API (OpenAI, Mistral, Groq, OpenRouter, or a
+  local model through Ollama or llama-server), set in `.env`. Either way it is one structured-output
+  request per reconciliation, with the same prompt and JSON schema. The model's links are validated and
   re-run through the deterministic matcher. Payer-written notes are treated as untrusted data.
   Without an API key, a deterministic fallback keeps the whole demo working. An eval file with
   31 expected outcomes (`make eval`) keeps both paths honest.
@@ -100,7 +102,7 @@ Request ids, statuses and the audit head hash are in `docs/sandbox-evidence.md`.
   (`cashdesk-<item>`; a retry never double-refunds), plus a sha256 hash-chained audit log.
 - **Frontend:** a single HTML page with AG Grid Community 36.2.0 from a CDN. There is no build step,
   and light and dark themes are supported.
-- **Process:** built test-first. About 240 tests cover every reconciliation case, every policy rule
+- **Process:** built test-first. About 260 tests cover every reconciliation case, every policy rule
   (including attempts to bypass it), the queue lifecycle and audit tampering.
 
 ## Challenges we ran into
@@ -137,7 +139,7 @@ leave the last click to a person, with enough evidence that the click takes two 
 
 ## Built with
 
-PayPal REST APIs (OAuth2, Transaction Search, Invoicing v2, Payments v2) · Claude (Anthropic SDK) ·
+PayPal REST APIs (OAuth2, Transaction Search, Invoicing v2, Payments v2) · Claude (Anthropic SDK) or any OpenAI-compatible LLM API ·
 AG Grid Community · Python · FastAPI · SQLite · httpx · pytest
 
 **Licence:** MIT. **Repository:** (link added at submission).

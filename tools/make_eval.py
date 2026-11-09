@@ -1,6 +1,6 @@
 """Build evals/match_eval.json from the fixture oracle (fixtures/cases.json).
 
-Usage: python tools/make_eval.py      Score it: make eval  (uses Claude when ANTHROPIC_API_KEY is set)
+Usage: python tools/make_eval.py      Score it: make eval  (uses the AI provider set in .env, if any)
 """
 
 from __future__ import annotations

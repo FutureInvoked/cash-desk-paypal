@@ -17,7 +17,8 @@ from tools.make_fixtures import inv_id, txn_id
 @pytest.fixture
 def desk(tmp_path, monkeypatch):
     monkeypatch.setenv("CASHDESK_VAR_DIR", str(tmp_path))
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    for v in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AI_API_KEY", "AI_PROVIDER", "AI_MODEL", "AI_BASE_URL"):
+        monkeypatch.delenv(v, raising=False)
     monkeypatch.delenv("CASHDESK_AS_OF", raising=False)
     now = [datetime(2026, 11, 7, 9, 0, tzinfo=timezone.utc)]
     d = Desk(client=FixturePayPalClient(), reconciler=FallbackReconciler(), clock=lambda: now[0])

@@ -23,7 +23,7 @@ make demo          # installs into .venv, serves http://localhost:8000 with samp
 Other commands:
 
 ```bash
-make test          # 240+ tests: matcher, AI layer (mocked), policy, queue, audit, API, UI contract
+make test          # 260+ tests: matcher, AI layer (mocked), policy, queue, audit, API, UI contract
 make audit-verify  # verifies the hash chain of var/audit.jsonl
 make eval          # scores reconciliation against the expected outcomes in evals/match_eval.json
 ```
@@ -60,7 +60,7 @@ the fixes for a person to approve.
 ```text
 PayPal (sandbox)                Cash Desk                                         Board (AG Grid)
 -----------------    ----------------------------------------------------------   ----------------
-Transaction Search -> ingest -> SQLite -> rules matcher -> AI layer (Claude) --->  Reconciliation
+Transaction Search -> ingest -> SQLite -> rules matcher -> AI layer (LLM)    --->  Reconciliation
 Invoicing v2       ->                     (evidence)       resolve + explain       grid + detail
                                                  |
                                                  v
@@ -88,26 +88,36 @@ unmatched, with its candidate invoices, for the AI.
 
 The AI layer is in `cashdesk/ai.py`, with the prompt in `cashdesk/prompts/reconcile_system.md`.
 
-- **Model:** `claude-sonnet-5-5` through the official Anthropic SDK. It makes one request per
-  reconciliation with structured JSON output and low effort. Server-side refusal fallback is on
-  (`fallbacks: "default"`), so a declined request is retried on another model inside the same call.
-- **Job 1, resolve.** For each payment the rules couldn't place, Claude may pick one invoice
+- **Models: Claude or any OpenAI-compatible API.** You pick the provider in `.env`:
+  - **Claude** (`claude-sonnet-5-5`) through the official Anthropic SDK: one request per
+    reconciliation with structured JSON output and low effort. Server-side refusal fallback is on
+    (`fallbacks: "default"`), so a declined request is retried on another model inside the same call.
+  - **Any OpenAI-compatible chat-completions API:** OpenAI, Mistral, Groq, OpenRouter, or a local
+    model through Ollama, llama-server or LM Studio. One request with a strict JSON schema
+    (`response_format`). Set `AI_MODEL`, plus `AI_BASE_URL` and `AI_API_KEY` as your endpoint needs.
+  - Both go through the same prompt, schema and guard rails below.
+  - Checked against a real local model on 2026-11-09: a 27B model behind llama-server, through
+    the OpenAI-compatible path, linked the Lumen Bakery payment to its invoice from the memo
+    (confidence 0.98) and wrote cited reasons that passed the guard rails. It needed 343 seconds
+    for 3 payments and 5 invoices on a laptop, so use a hosted model for real volumes, or raise
+    `AI_TIMEOUT` for a local one.
+- **Job 1, resolve.** For each payment the rules couldn't place, the model may pick one invoice
   from that payment's candidate list. Example: the owner of Lumen Bakery paid from a personal address,
   and only the memo links the payment to the invoice.
-- **Job 2, explain.** Claude writes a one-line reason for every result, citing the PayPal evidence fields.
+- **Job 2, explain.** The model writes a one-line reason for every result, citing the PayPal evidence fields.
 - **Guard rails:**
-  - Claude only suggests.
+  - The model only suggests.
   - A link is kept only if the invoice was one of the candidates, the currency matches and the
     confidence is at least 0.6. It then goes back through the deterministic matcher.
   - Suggested matches are marked "needs review".
   - A reason is kept only if every field it cites exists in the evidence.
   - Text written by payers (notes, subjects) is passed to the model as untrusted data.
   - The AI layer has no path to any PayPal write.
-- **No key? It still works.** Without `ANTHROPIC_API_KEY`, or on an API error, a refusal or
+- **No key? It still works.** With no AI provider set, or on an API error, a refusal or
   invalid output, a deterministic fallback takes over. It is a memo heuristic plus templated reasons.
-  The board shows which one ran (`AI: fallback …` or `AI: ai (claude-sonnet-5-5)`).
-- `make eval` scores 31 expected outcomes. The fallback scores 31/31 on the sample data. Set
-  `ANTHROPIC_API_KEY` to score Claude. That makes one real API call.
+  The board shows which one ran (`AI: fallback …` or `AI: ai (<model>)`).
+- `make eval` scores 31 expected outcomes. The fallback scores 31/31 on the sample data. Set an AI
+  provider in `.env` to score that model. That makes one real API call.
 
 ## Safety design
 
@@ -147,7 +157,13 @@ field for field, and a test walks every key.
    `.env` is gitignored, so never commit it.
 4. Run `make demo`. With keys present the mode defaults to `PAYPAL_MODE=sandbox`. Force sample data
    with `PAYPAL_MODE=fixtures make demo`.
-5. Optional: add `ANTHROPIC_API_KEY=` for live AI matching and reasons.
+5. Optional, for live AI matching and reasons, add one of these:
+   - `ANTHROPIC_API_KEY=` for Claude;
+   - `AI_MODEL=`, `AI_API_KEY=` and, if it isn't OpenAI, `AI_BASE_URL=` for any OpenAI-compatible
+     API. For a local Ollama model: `AI_PROVIDER=openai`, `AI_BASE_URL=http://localhost:11434/v1`,
+     `AI_MODEL=<model>`, no key.
+
+   See `.env.example`.
 
 Sandbox notes:
 - New transactions can take up to about 3 hours to appear in Transaction Search, so payments

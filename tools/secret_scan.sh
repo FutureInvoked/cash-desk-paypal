@@ -7,6 +7,8 @@ PATTERNS=(
   'PAYPAL_CLIENT_(SECRET|ID)=[A-Za-z0-9_-]{8,}'   # a filled-in PayPal key
   'A21AA[A-Za-z0-9_-]{20,}'                         # PayPal OAuth access token
   'sk-ant-[A-Za-z0-9_-]{10,}'                       # Anthropic API key
+  'sk-(proj-)?[A-Za-z0-9_-]{32,}'                   # OpenAI-style API key
+  'AI_API_KEY=[A-Za-z0-9_-]{8,}'                   # a filled-in OpenAI-compatible key
   'Bearer [A-Za-z0-9._-]{24,}'                      # any bearer token
   'access_token"?[:=] *"[A-Za-z0-9._-]{20,}'        # token in JSON / env form
   '-----BEGIN [A-Z ]*PRIVATE KEY-----'

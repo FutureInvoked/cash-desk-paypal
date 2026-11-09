@@ -1,4 +1,5 @@
-"""Score the reconciler on evals/match_eval.json. Live Claude only if ANTHROPIC_API_KEY is set."""
+"""Score the reconciler on evals/match_eval.json. Uses a live model only if an AI provider is set in .env
+(ANTHROPIC_API_KEY, or AI_MODEL with an OpenAI-compatible endpoint); otherwise the deterministic fallback."""
 
 from __future__ import annotations
 

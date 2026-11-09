@@ -1,10 +1,15 @@
-"""AI layer: Claude resolves the payments the rules can't place and explains every result.
+"""AI layer: an LLM resolves the payments the rules can't place and explains every result.
 
-- Model: claude-sonnet-5-5 through the official Anthropic SDK, one request per reconciliation,
+Providers (chosen in .env, see make_reconciler):
+- Claude: claude-sonnet-5-5 through the official Anthropic SDK, one request per reconciliation,
   structured JSON output (output_config.format), effort "low", server-side refusal fallback
   (`fallbacks: "default"`, beta server-side-fallback-2026-07-01).
-- Without ANTHROPIC_API_KEY (or on any API error, refusal or invalid output) the deterministic
+- Any OpenAI-compatible chat-completions API (OpenAI, Mistral, Groq, OpenRouter, Ollama,
+  llama-server, LM Studio, vLLM...): one POST {AI_BASE_URL}/chat/completions with a strict
+  json_schema response_format, over httpx.
+- With no provider set (or on any API error, refusal or invalid output) the deterministic
   FallbackReconciler runs instead, so the demo works with no keys.
+Both providers go through the same validation below.
 - The AI only suggests. Its links are validated (candidate invoice, same currency, confidence
   >= MIN_CONFIDENCE) and fed back through the deterministic matcher; its reasons are kept only if
   they cite evidence fields that exist. Nothing here can execute an action.
@@ -149,7 +154,10 @@ class FallbackReconciler:
             if len(hits) == 1:
                 i, ev = hits[0]
                 links[t.id] = Link(i.number, "memo_heuristic", "fallback", 0.6, ev)
-        return Suggestions(links, {}, "fallback (no ANTHROPIC_API_KEY)")
+        return Suggestions(links, {}, self.status)
+
+    def __init__(self, status: str = "fallback (no AI provider set)"):
+        self.status = status
 
 
 class ClaudeReconciler:
@@ -189,31 +197,41 @@ class ClaudeReconciler:
         return self._validate(out, result, invoices, txns, payload)
 
     def _fallback(self, result, invoices, txns, status):
-        s = FallbackReconciler().suggest(result, invoices, txns)
-        return Suggestions(s.links, {}, status)
+        return fallback_suggestions(result, invoices, txns, status)
 
     def _validate(self, out, result, invoices, txns, payload) -> Suggestions:
-        by_txn = {t.id: t for t in _unmatched(result, txns)}
-        links: dict[str, Link] = {}
-        for res in out.get("resolutions", []):
-            t = by_txn.get(res.get("transaction_id"))
-            num = res.get("invoice_number")
-            conf = float(res.get("confidence") or 0)
-            if not t or not num or conf < MIN_CONFIDENCE:
-                continue
-            if num not in {i.number for i in candidates(result, invoices, t)}:
-                continue  # the AI may only pick from the candidates it was shown
-            ev = {"ai.reason": str(res.get("reason", ""))[:300]}
-            ev.update({f: payload_value(payload, t.id, f) for f in res.get("cited_fields", [])
-                       if payload_value(payload, t.id, f) is not None})
-            links[t.id] = Link(num, "ai", "ai", conf, ev)
-        evidence_keys = {r["id"]: set(r["evidence"]) for r in payload["results"]}
-        reasons = {}
-        for r in out.get("reasons", []):
-            rid, text, cited = r.get("id"), _one_line(r.get("reason", "")), r.get("cited_fields", [])
-            if rid in evidence_keys and text and cited and set(cited) <= evidence_keys[rid]:
-                reasons[rid] = text
-        return Suggestions(links, reasons, f"ai ({self.model})")
+        return validate(out, result, invoices, txns, payload, self.model)
+
+
+def fallback_suggestions(result, invoices, txns, status: str) -> Suggestions:
+    s = FallbackReconciler().suggest(result, invoices, txns)
+    return Suggestions(s.links, {}, status)
+
+
+def validate(out, result, invoices, txns, payload, model: str) -> Suggestions:
+    """Keep only what the evidence backs: candidate invoices, same currency (via candidates),
+    confidence >= MIN_CONFIDENCE, and reasons whose cited fields exist."""
+    by_txn = {t.id: t for t in _unmatched(result, txns)}
+    links: dict[str, Link] = {}
+    for res in out.get("resolutions", []):
+        t = by_txn.get(res.get("transaction_id"))
+        num = res.get("invoice_number")
+        conf = float(res.get("confidence") or 0)
+        if not t or not num or conf < MIN_CONFIDENCE:
+            continue
+        if num not in {i.number for i in candidates(result, invoices, t)}:
+            continue  # the AI may only pick from the candidates it was shown
+        ev = {"ai.reason": str(res.get("reason", ""))[:300]}
+        ev.update({f: payload_value(payload, t.id, f) for f in res.get("cited_fields", [])
+                   if payload_value(payload, t.id, f) is not None})
+        links[t.id] = Link(num, "ai", "ai", conf, ev)
+    evidence_keys = {r["id"]: set(r["evidence"]) for r in payload["results"]}
+    reasons = {}
+    for r in out.get("reasons", []):
+        rid, text, cited = r.get("id"), _one_line(r.get("reason", "")), r.get("cited_fields", [])
+        if rid in evidence_keys and text and cited and set(cited) <= evidence_keys[rid]:
+            reasons[rid] = text
+    return Suggestions(links, reasons, f"ai ({model})")
 
 
 def payload_value(payload: dict, txn_id: str, field: str):
@@ -223,9 +241,88 @@ def payload_value(payload: dict, txn_id: str, field: str):
     return None
 
 
+class OpenAICompatibleReconciler:
+    """Any server that speaks OpenAI's chat-completions API. Same prompt, schema and validation
+    as Claude; the key (if any) goes only into the Authorization header, never into a status."""
+
+    name = "openai-compatible"
+
+    def __init__(self, model: str, base_url: str = "https://api.openai.com/v1", api_key: str | None = None,
+                 http=None, timeout: float = 120.0):
+        import httpx
+        self.model, self.base_url, self.api_key = model, base_url.rstrip("/"), api_key or None
+        self.http = http or httpx.Client(timeout=timeout)
+
+    def suggest(self, result: MatchResult, invoices: list[Invoice], txns: list[Transaction]) -> Suggestions:
+        import httpx
+
+        payload = build_payload(result, invoices, txns)
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        body = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": SYSTEM_PROMPT},
+                         {"role": "user", "content": json.dumps(payload, default=str)}],
+            "response_format": {"type": "json_schema",
+                                "json_schema": {"name": "reconciliation", "strict": True, "schema": OUTPUT_SCHEMA}},
+        }
+        fb = lambda why: fallback_suggestions(result, invoices, txns, f"fallback ({why})")
+        try:
+            resp = self.http.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
+        except httpx.HTTPError as e:
+            return fb(f"API error: {type(e).__name__}")
+        if resp.status_code >= 400:
+            return fb(f"API error: HTTP {resp.status_code}")
+        try:
+            choice = resp.json()["choices"][0]
+        except (ValueError, KeyError, IndexError, TypeError):
+            return fb("invalid AI output")
+        msg = choice.get("message") or {}
+        if msg.get("refusal"):
+            return fb("model declined")
+        if choice.get("finish_reason") == "length":
+            return fb("output truncated")
+        text = (msg.get("content") or "").strip()
+        fence = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.S)
+        if fence:
+            text = fence.group(1)
+        try:
+            out = json.loads(text)
+        except json.JSONDecodeError:
+            return fb("invalid AI output")
+        if not isinstance(out, dict):
+            return fb("invalid AI output")
+        return validate(out, result, invoices, txns, payload, self.model)
+
+
+PROVIDERS = ("auto", "anthropic", "openai", "none")
+
+
 def make_reconciler():
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return ClaudeReconciler()
+    """AI_PROVIDER = auto (default) | anthropic | openai | none.
+    auto: Claude when ANTHROPIC_API_KEY is set, else an OpenAI-compatible API when AI_MODEL is set
+    together with OPENAI_API_KEY / AI_API_KEY / AI_BASE_URL, else the deterministic fallback.
+    openai: AI_MODEL (required), AI_BASE_URL (default https://api.openai.com/v1),
+    AI_API_KEY or OPENAI_API_KEY (optional for local servers such as Ollama), AI_TIMEOUT (seconds, default 120)."""
+    env = os.environ.get
+    provider = (env("AI_PROVIDER") or "auto").strip().lower()
+    if provider not in PROVIDERS:
+        raise ValueError(f"AI_PROVIDER must be one of {', '.join(PROVIDERS)}, got {provider!r}")
+    key = env("AI_API_KEY") or env("OPENAI_API_KEY")
+    if provider == "none":
+        return FallbackReconciler("fallback (AI_PROVIDER=none)")
+    if provider == "anthropic" or (provider == "auto" and env("ANTHROPIC_API_KEY")):
+        return ClaudeReconciler(model=env("AI_MODEL") or MODEL) if provider == "anthropic" else ClaudeReconciler()
+    if provider == "openai" or (provider == "auto" and env("AI_MODEL") and (key or env("AI_BASE_URL"))):
+        if not env("AI_MODEL"):
+            return FallbackReconciler("fallback (set AI_MODEL for the OpenAI-compatible provider)")
+        try:
+            timeout = float(env("AI_TIMEOUT") or 120)
+        except ValueError:
+            raise ValueError(f"AI_TIMEOUT must be a number of seconds, got {env('AI_TIMEOUT')!r}") from None
+        return OpenAICompatibleReconciler(model=env("AI_MODEL"), base_url=env("AI_BASE_URL") or "https://api.openai.com/v1",
+                                          api_key=key, timeout=timeout)
     return FallbackReconciler()
 
 
