@@ -103,6 +103,26 @@ class SandboxPayPalClient(PayPalClient):
             return r
         self._raise(r, path)
 
+    # ------------------------------------------------------------------ webhooks
+    def verify_webhook_signature(self, raw_event: str, headers, *, webhook_id: str) -> str:
+        """POST /v1/notifications/verify-webhook-signature (Webhooks Management v1 spec).
+
+        The event goes in exactly as received: PayPal signs the raw bytes, so re-serialising the
+        JSON could change them and fail a genuine delivery."""
+        import json as _json
+        h = {k.upper(): v for k, v in dict(headers).items()}
+        fields = {"auth_algo": h.get("PAYPAL-AUTH-ALGO"), "cert_url": h.get("PAYPAL-CERT-URL"),
+                  "transmission_id": h.get("PAYPAL-TRANSMISSION-ID"),
+                  "transmission_sig": h.get("PAYPAL-TRANSMISSION-SIG"),
+                  "transmission_time": h.get("PAYPAL-TRANSMISSION-TIME"), "webhook_id": webhook_id}
+        body = _json.dumps(fields)[:-1] + ', "webhook_event": ' + raw_event.strip() + "}"
+        path = "/v1/notifications/verify-webhook-signature"
+        r = self._http.post(path, content=body.encode(), headers={
+            "Authorization": f"Bearer {self._bearer()}", "Content-Type": "application/json", "Accept": "application/json"})
+        if r.status_code >= 400:
+            self._raise(r, path)
+        return r.json().get("verification_status", "FAILURE")
+
     # ------------------------------------------------------------------ reads
     def list_invoices(self) -> list[Invoice]:
         out, page = [], 1

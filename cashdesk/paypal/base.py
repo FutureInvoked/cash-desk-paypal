@@ -47,3 +47,8 @@ class PayPalClient(ABC):
 
     @abstractmethod
     def refund_capture(self, capture_id: str, amount: Money, *, request_id: str, note_to_payer: str) -> dict: ...
+
+    def verify_webhook_signature(self, raw_event: str, headers, *, webhook_id: str) -> str:
+        """Ask PayPal whether a webhook delivery is genuine: "SUCCESS" or "FAILURE".
+        Clients that can't ask PayPal (the fixture client) fail closed."""
+        return "FAILURE"

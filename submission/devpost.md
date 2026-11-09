@@ -52,19 +52,18 @@ Cash Desk pulls PayPal transactions (Transaction Search) and invoices (Invoicing
   approves or rejects it. Refunds above 500 need **two different people**: the first approval is
   only recorded, and the executor refuses a large refund without two distinct approvers. The
   policy runs again just before the call. Rejected, expired or blocked actions never run.
+- **Listens to PayPal (optional webhooks).** A separate, webhook-only server takes PayPal events,
+  checks each one with PayPal's `verify-webhook-signature` API, ignores repeats, and re-syncs. An
+  event never proposes or runs an action, and amounts always come from PayPal's APIs, not the event body.
 - **Exports the books.** One click downloads a journal (CSV) with one balanced entry per payment
   and refund: net to the PayPal balance, the fee to PayPal fees, and the gross to receivables,
   customer credits (duplicates, overpayments) or unapplied payments.
 - **Proves it.** Every proposal, approval, rejection and PayPal call goes into an append-only,
   hash-chained audit log with a one-command verifier. The board shows the chain status and the head hash.
 
-The board is one page built on **AG Grid Community** (Community features only, no licence key):
-- exception-first status groups, built from full-width group rows and the external filter;
-- status pills;
-- a search box and an exceptions-only filter;
-- wrapped AI reasons and a detail panel with the evidence fields;
-- an approvals grid with the confirm dialog;
-- an audit grid.
+The board is one page built on **AG Grid Community** (no licence key): exception-first status
+groups from full-width rows and the external filter, status pills, search, wrapped AI reasons with
+an evidence panel, and approvals and audit grids.
 
 **Who it's for:** small businesses and their bookkeepers who invoice through PayPal, from
 freelancers to agencies with a few dozen clients a month.
@@ -87,6 +86,9 @@ that on 7 and 8 November 2026:
 - **The memo match:** a 150.00 Send Money with no invoice number was suggested for invoice 0008 from
   its note alone ("Lumen Bakery - Website retainer"), marked for review, with a record-payment
   proposal waiting for approval.
+- **The webhook:** approving that record-payment made PayPal send a real `INVOICING.INVOICE.PAID`
+  event 43 seconds later. PayPal verified the signature, the desk re-synced, and a second delivery
+  of the same event was ignored as a duplicate.
 - **What the gate caught:** the agent also proposed reminders for four invoices the buyer had just
   paid by Send Money. Transaction Search hadn't reported those payments yet; it runs about 2 hours
   behind. The human rejected them with a note. That moment is why every action waits for a person.
@@ -118,7 +120,7 @@ AG Grid board.
   (`cashdesk-<item>`; a retry never double-refunds), plus a sha256 hash-chained audit log.
 - **Frontend:** a single HTML page with AG Grid Community 36.2.0 from a CDN. There is no build step,
   and light and dark themes are supported.
-- **Process:** built test-first. About 290 tests cover every reconciliation case, every policy rule
+- **Process:** built test-first. About 310 tests cover every reconciliation case, every policy rule
   (including attempts to bypass it), the queue lifecycle and audit tampering.
 
 ## Challenges we ran into
@@ -131,15 +133,15 @@ AG Grid board.
   through a policy check that also re-reads the stored proposal, so editing it after approval is caught.
 - **Grouping without Enterprise features.** Row grouping is an AG Grid Enterprise feature, so we
   built status groups from Community features: full-width rows plus the external filter.
-- **Money.** Amounts arrive as strings, fees are negative, and some invoices are in EUR and others
-  in USD. Everything is `Decimal`, and mixed-currency arithmetic raises an error.
+- **Money.** Amounts arrive as strings and fees are negative. Everything is `Decimal`, and
+  mixed-currency arithmetic raises an error.
 
 ## Accomplishments that we're proud of
 
 - An approval dialog that shows exactly which PayPal request will run before anything runs.
 - A tamper-evident audit trail. Edit, delete, reorder or truncate a line, and `make audit-verify`
   names the first bad record.
-- A demo that works with zero keys and is honest about which parts are AI and which are rules.
+- A zero-key demo that is honest about which parts are AI and which are rules.
 
 ## What we learned
 
@@ -148,14 +150,14 @@ leave the last click to a person, with enough evidence that the click takes two 
 
 ## What's next
 
-- Webhooks (`PAYMENT.CAPTURE.COMPLETED`, `INVOICING.INVOICE.PAID`) instead of polling.
+- Hosting the webhook server permanently instead of a temporary tunnel.
 - Real user accounts behind the two-person rule (today approvers type their name).
 - Write-off suggestions for fee shortfalls.
 - Direct export to accounting systems (today it's a CSV journal).
 
 ## Built with
 
-PayPal REST APIs (OAuth2, Transaction Search, Invoicing v2, Payments v2) · Claude (Anthropic SDK) or any OpenAI-compatible LLM API ·
+PayPal REST APIs (OAuth2, Transaction Search, Invoicing v2, Payments v2, Webhooks v1) · Claude (Anthropic SDK) or any OpenAI-compatible LLM API ·
 AG Grid Community · Python · FastAPI · SQLite · httpx · pytest
 
-**Licence:** MIT. **Repository:** https://github.com/FutureInvoked/cash-desk-paypal · **Video:** https://www.youtube.com/watch?v=grsDzN1YzL0
+**Licence:** MIT. **Repository:** https://github.com/FutureInvoked/cash-desk-paypal · **Video:** https://www.youtube.com/watch?v=hzhK6W0vn8I

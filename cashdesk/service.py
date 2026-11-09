@@ -44,6 +44,7 @@ class Desk:
         self.audit = AuditLog(var / "audit.jsonl")
         self.queue = ApprovalQueue(var / "cashdesk.db", policy=policy, clock=self.clock, on_event=self.audit.append)
         self._result: MatchResult | None = None
+        self._result_run: int | None = None
 
     # ---- time window ----
     @property
@@ -67,8 +68,13 @@ class Desk:
         return res
 
     def result(self) -> MatchResult:
-        if not self.store.sync_runs():
+        runs = self.store.sync_runs()
+        if not runs:
             self.sync()
+            runs = self.store.sync_runs()
+        if runs[-1]["id"] != self._result_run:  # another process (the webhook server) synced
+            self._result = None
+            self._result_run = runs[-1]["id"]
         if self._result is None:
             self._result = reconcile(self.store.invoices(), self.store.transactions(), as_of=self.as_of,
                                      reconciler=self.reconciler)

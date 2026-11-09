@@ -149,3 +149,25 @@ fictional customer's address instead of the business account and never reached t
   `refund_overpayment` of 4.50 USD on 0017 (the tip), a partial refund capped at the overpaid excess.
   Both pass the policy.
 - Audit chain after the proposals: 20 records, verify OK. Head `4745ce42e88feba02d90209a84a72be00e2fb4959a07f4a625fbaa3ece27f9d4`.
+
+## S6: a real PayPal webhook, verified (2026-11-09, 18:59 UTC)
+
+Set-up, all temporary: the webhook-only server (`cashdesk.webhook_app`, port 8001) behind a
+Cloudflare quick tunnel, and a webhook registered on the sandbox app with `tools/webhook_setup.py`
+for the six subscribed event types.
+
+| Time (UTC) | What happened |
+|---|---|
+| 18:58:58 | `record_payment` 150.00 USD on invoice 0008 (the memo match from S5) approved through the gate |
+| 18:59:01 | executed, `PayPal-Request-Id: cashdesk-q00008`, PayPal payment `EXTR-63L72930K2468451K`; invoice status `MARKED_AS_PAID` |
+| 18:59:17 | PayPal created event `WH-7PT40345H3816905Y-67K33572BX261623N`, `INVOICING.INVOICE.PAID`, resource `INV2-UWZS-TSN9-PB3N-PR9J` |
+| 18:59:44 | delivered to `POST /webhooks/paypal`; PayPal's `verify-webhook-signature` answered `SUCCESS`; the desk re-synced (17 invoices, 30 transactions); audit `webhook_received` |
+
+- PayPal delivered the event **twice** (from 173.0.80.116 and 173.0.80.117). The second copy was
+  answered `duplicate` and caused no second sync; the inbox holds one row for the event id.
+- Transmission id `adaa3718-dc6f-11f1-ae6a-d1526f469e1d`. Audit chain after the run: 24 records,
+  verify OK, head `1d4d33f44150d12fc93b420c57eb34ed104ad090b4342d83f28ace11636b77d1`.
+- **Found on the way:** this Mac had a cloudflared `config.yml` with ingress rules for another
+  hostname, which made the quick tunnel answer 404. Giving the quick tunnel its own empty config with
+  `--config` fixed it (now in the README).
+- Clean-up: webhook `4MC82235WV014724F` deleted from the sandbox app, tunnel closed, server stopped.

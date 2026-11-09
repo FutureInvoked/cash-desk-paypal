@@ -24,7 +24,7 @@ make demo          # installs into .venv, serves http://localhost:8000 with samp
 Other commands:
 
 ```bash
-make test          # 290+ tests: matcher, AI layer (mocked), policy, queue, audit, API, UI contract
+make test          # 310+ tests: matcher, AI layer (mocked), policy, queue, audit, API, UI contract
 make audit-verify  # verifies the hash chain of var/audit.jsonl
 make eval          # scores reconciliation against the expected outcomes in evals/match_eval.json
 ```
@@ -156,6 +156,37 @@ Pending payments, currency conversions and bank withdrawals are not booked. Acco
 so they can be mapped to any chart of accounts. Text that payers wrote is escaped so a spreadsheet
 can't run it as a formula.
 
+## Webhooks (optional)
+
+Polling is the default. With webhooks, PayPal tells the desk when something changes, and the desk
+re-syncs within seconds instead of on the next poll. Send Money payments still appear only through
+Transaction Search, which runs about 2 hours behind, so webhooks don't remove that lag.
+
+- **A separate server** (`make webhooks`, port 8001) serves only `POST /webhooks/paypal` and
+  `GET /webhooks/health`. Point a tunnel or reverse proxy at this port, never at the board.
+- **Every event is verified with PayPal** (`POST /v1/notifications/verify-webhook-signature`, with
+  the raw body passed through unchanged). Unverified events are rejected and audited. Without
+  `PAYPAL_WEBHOOK_ID` in `.env`, nothing is accepted.
+- **An event only triggers a re-sync.** Amounts and matches always come from PayPal's APIs, never
+  from the event body, and an event can't propose, approve or run an action. Repeated event ids are
+  ignored. Each event lands in the audit log (`webhook_received` / `webhook_rejected`).
+- **Subscribed events:** `PAYMENT.CAPTURE.COMPLETED`, `.REFUNDED`, `.REVERSED`,
+  `INVOICING.INVOICE.PAID`, `.UPDATED`, `.REFUNDED`.
+
+Set it up against your sandbox app:
+
+```bash
+make webhooks                                   # terminal 1: the webhook-only server
+cloudflared tunnel --url http://127.0.0.1:8001  # terminal 2: a public HTTPS address for it
+.venv/bin/python -m tools.webhook_setup create https://<your-tunnel-host>/webhooks/paypal
+# put the printed PAYPAL_WEBHOOK_ID=... in .env and restart `make webhooks`
+.venv/bin/python -m tools.webhook_setup delete <webhook_id>   # when you're done
+```
+
+If you already have a cloudflared `config.yml` with ingress rules (for example in
+`/usr/local/etc/cloudflared/`), give the quick tunnel its own empty config with `--config`;
+otherwise those rules answer 404 for the tunnel's address.
+
 ## PayPal APIs used
 
 All endpoints and response shapes are taken from PayPal's official OpenAPI specs and reference pages.
@@ -172,6 +203,8 @@ field for field, and a test walks every key.
 | Invoicing v2 | `POST /v2/invoicing/invoices/{invoice_id}/remind` | payment reminder for an overdue invoice |
 | Invoicing v2 | `POST /v2/invoicing/invoices/{invoice_id}/payments` | record a payment the AI matched |
 | Payments v2 | `POST /v2/payments/captures/{capture_id}/refund` | refund a duplicate payment, or only the overpaid part (partial refund) |
+| Webhooks v1 | `POST /v1/notifications/verify-webhook-signature` | check that a webhook delivery really came from PayPal |
+| Webhooks v1 | `POST`/`GET`/`DELETE /v1/notifications/webhooks` | register, list and remove the webhook (`tools/webhook_setup.py`) |
 
 ## Run it against the PayPal sandbox
 
