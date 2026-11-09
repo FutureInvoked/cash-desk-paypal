@@ -197,6 +197,12 @@ After a re-sync on the fixed code: the 150.00 is matched to 0008 (paid 150.00), 
 in the board (q00009). PayPal refund **`8FU36371TX504383F`**, 4.50 USD, `PayPal-Request-Id:
 cashdesk-q00009`: a real partial refund of the tip, through the gate. Until Transaction Search
 reports the refund row (about 2 hours), 0017 still shows as overpaid; fix 2 then turns it into a clean match.
+**Closed on 2026-11-09:** Transaction Search reported the refund row at about 19:30 UTC (its
+`last_refreshed_datetime`; the refund was made at 19:13). After a re-sync at 21:29 UTC, the live desk shows payment
+`8NM54714TF7563445` as **matched** with `refunded_excess: 4.50 USD`, refund `8FU36371TX504383F` as a
+refund row, invoice 0017 **paid** (received 45.00, outstanding 0.00), and Unreconciled still empty
+(AI: Codex, gpt-6-sol). That check also found a cache race: a slow AI reconcile started before a
+sync could replace the newer result; fixed with a test (`tests/test_review3.py`).
 
 Audit chain: 27 records, verify OK. Head `28f02c6b343265e71c696420a8affeba8b218cf1e9a1ab60b3f42a3405a8d04b`.
 

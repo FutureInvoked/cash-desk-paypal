@@ -7,6 +7,7 @@ the approval queue (policy-gated) and the audit log. All app code goes through h
 from __future__ import annotations
 
 import os
+import threading
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
@@ -46,6 +47,7 @@ class Desk:
                                    witness=self._approval_records)
         self._result: MatchResult | None = None
         self._result_run: int | None = None
+        self._lock = threading.Lock()
 
     # ---- time window ----
     @property
@@ -73,13 +75,20 @@ class Desk:
         if last is None:
             self.sync()
             last = self.store.last_sync()
-        if last["id"] != self._result_run:  # another process (the webhook server) synced
-            self._result = None
-            self._result_run = last["id"]
-        if self._result is None:
-            self._result = reconcile(self.store.invoices(), self.store.transactions(), as_of=self.as_of,
-                                     reconciler=self.reconciler)
-        return self._result
+        run = last["id"]
+        cached, cached_run = self._result, self._result_run
+        if cached is not None and cached_run == run:
+            return cached
+        # Reconciling can take a minute (the AI call). It is cached under the sync run it read, and
+        # only if no newer sync landed meanwhile (here or in the webhook server), so a slow result
+        # computed from older data never replaces a newer one.
+        res = reconcile(self.store.invoices(), self.store.transactions(), as_of=self.as_of,
+                        reconciler=self.reconciler)
+        with self._lock:
+            latest = self.store.last_sync()
+            if latest and latest["id"] == run and (self._result_run != run or self._result is None):
+                self._result, self._result_run = res, run
+        return res
 
     def reconciliation(self) -> dict:
         r = self.result()

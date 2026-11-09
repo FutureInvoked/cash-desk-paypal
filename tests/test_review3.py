@@ -440,3 +440,36 @@ def test_11_a_claim_still_in_progress_asks_paypal_to_retry(tmp_path, monkeypatch
     assert WebhookInbox(d.settings.var_dir / "cashdesk.db").claim(json.loads(event())) == "new"
     code, body = handle(d, event().encode(), HEADERS)
     assert code >= 400 and body["status"] == "retry"
+
+
+# ---------- found while checking the live desk: a slow reconcile started before a sync ----------
+
+def test_a_reconcile_started_before_a_sync_does_not_overwrite_the_newer_result(desk):
+    c = Moving()
+    d = desk(c)
+    d.result()
+    started, release = threading.Event(), threading.Event()
+    calls = {"n": 0}
+
+    class Slow(FallbackReconciler):
+        def suggest(self, result, invoices, txns):
+            calls["n"] += 1
+            if calls["n"] == 1:  # the board's first read: its AI call is still running when the sync lands
+                started.set()
+                release.wait(5)
+            return super().suggest(result, invoices, txns)
+    d.reconciler = Slow()
+    d.sync()
+    old = threading.Thread(target=d.result)
+    old.start()
+    started.wait(5)
+    extra = txn("LATEROW00000001", "5.00", T0, invoice_ref=None, email="new@example.com")
+    c.extra = [extra]
+    d.sync()
+    fresh = threading.Thread(target=d.result)  # the read after the sync finishes first...
+    fresh.start()
+    fresh.join(1)
+    release.set()  # ...then the old computation finishes
+    old.join()
+    fresh.join()
+    assert any(t.txn_id == extra.id for t in d.result().transactions)
