@@ -15,7 +15,7 @@ from cashdesk.ai import (ClaudeReconciler, FallbackReconciler, OpenAICompatibleR
 from tests.test_ai import AS_OF, LUMEN, data, good_payload
 from tools.make_fixtures import txn_id
 
-AI_VARS = ("AI_PROVIDER", "AI_MODEL", "AI_BASE_URL", "AI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "AI_TIMEOUT")
+AI_VARS = ("AI_PROVIDER", "AI_MODEL", "AI_BASE_URL", "AI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "AI_TIMEOUT", "CODEX_BIN")
 
 
 @pytest.fixture
@@ -192,3 +192,84 @@ def test_ai_timeout_is_configurable_for_slow_local_models(clean_env):
     clean_env.setenv("AI_TIMEOUT", "soon")
     with pytest.raises(ValueError, match="AI_TIMEOUT"):
         make_reconciler()
+
+
+# ---------- Codex CLI (ChatGPT sign-in) ----------
+
+from cashdesk.ai import CodexReconciler  # noqa: E402
+
+
+class FakeRun:
+    """Stands in for subprocess.run: records the call and writes Codex's -o output file."""
+
+    def __init__(self, reply=None, returncode=0, exc=None, write=True):
+        self.reply, self.returncode, self.exc, self.write, self.calls = reply, returncode, exc, write, []
+
+    def __call__(self, args, *, input, timeout, capture_output, text, cwd):
+        self.calls.append({"args": args, "input": input, "timeout": timeout, "cwd": cwd})
+        if self.exc:
+            raise self.exc
+        if self.write and self.reply is not None:
+            out = args[args.index("-o") + 1]
+            open(out, "w").write(self.reply if isinstance(self.reply, str) else json.dumps(self.reply))
+        import subprocess
+        return subprocess.CompletedProcess(args, self.returncode, "", "ERROR: boom" if self.returncode else "")
+
+
+def test_codex_provider_is_opt_in(clean_env, tmp_path):
+    clean_env.setenv("AI_PROVIDER", "codex")
+    clean_env.setenv("CODEX_BIN", str(tmp_path / "codex"))
+    (tmp_path / "codex").write_text("#!/bin/sh\n")
+    r = make_reconciler()
+    assert isinstance(r, CodexReconciler) and r.model == "gpt-6-sol" and r.timeout == 300.0
+    clean_env.setenv("AI_MODEL", "gpt-6-luna")
+    clean_env.setenv("AI_TIMEOUT", "120")
+    r = make_reconciler()
+    assert r.model == "gpt-6-luna" and r.timeout == 120.0
+
+
+def test_codex_without_a_binary_falls_back_and_says_why(clean_env):
+    clean_env.setenv("AI_PROVIDER", "codex")
+    clean_env.setenv("CODEX_BIN", "/nonexistent/codex")
+    r = make_reconciler()
+    assert isinstance(r, FallbackReconciler) and "codex" in r.status.lower()
+
+
+def test_codex_call_is_sandboxed_and_schema_bound():
+    invs, txns = data()
+    run = FakeRun({"resolutions": [], "reasons": []})
+    res = reconcile(invs, txns, as_of=AS_OF, reconciler=CodexReconciler(codex_bin="/bin/codex", runner=run))
+    (call,) = run.calls
+    a = call["args"]
+    assert a[0] == "/bin/codex" and a[1] == "exec" and a[-1] == "-"
+    assert a[a.index("-s") + 1] == "read-only" and "--ephemeral" in a and "--skip-git-repo-check" in a
+    assert a[a.index("-m") + 1] == "gpt-6-sol" and "mcp_servers={}" in a
+    assert a[a.index("-C") + 1] == call["cwd"]
+    assert "untrusted" in call["input"].lower() and LUMEN in call["input"] and "NW-1021" in call["input"]
+    assert res.ai_status == "ai (codex: gpt-6-sol)"
+
+
+def test_codex_resolution_goes_through_the_same_guard_rails():
+    invs, txns = data()
+    ids = [t.id for t in txns] + [i.number for i in invs]
+    res = reconcile(invs, txns, as_of=AS_OF, reconciler=CodexReconciler(codex_bin="/bin/codex",
+                                                                         runner=FakeRun(good_payload(ids))))
+    t = res.txn(LUMEN)
+    assert t.outcome == "matched" and t.rule == "ai" and t.reason_source == "ai"
+    bad = good_payload([])
+    bad["resolutions"][0]["invoice_number"] = "NW-1001"
+    res = reconcile(invs, txns, as_of=AS_OF, reconciler=CodexReconciler(codex_bin="/bin/codex", runner=FakeRun(bad)))
+    assert res.txn(LUMEN).outcome == "unmatched"
+
+
+@pytest.mark.parametrize("kind", ["exit_1", "timeout", "no_output", "bad_json", "missing_binary"])
+def test_codex_failures_fall_back_to_rules(kind):
+    import subprocess
+    invs, txns = data()
+    run = {"exit_1": FakeRun({"resolutions": [], "reasons": []}, returncode=1),
+           "timeout": FakeRun(exc=subprocess.TimeoutExpired("codex", 300)),
+           "no_output": FakeRun(None),
+           "bad_json": FakeRun("not json"),
+           "missing_binary": FakeRun(exc=FileNotFoundError("codex"))}[kind]
+    res = reconcile(invs, txns, as_of=AS_OF, reconciler=CodexReconciler(codex_bin="/bin/codex", runner=run))
+    assert res.ai_status.startswith("fallback") and res.txn(LUMEN).resolved_by == "fallback"

@@ -10,7 +10,7 @@ git clone -q "$SRC" "$TMP"
 cd "$TMP"
 test ! -e .env || { echo "FAIL: .env is tracked"; exit 1; }
 # a judge has no keys: strip every credential from the environment
-CLEAN="env -u PAYPAL_CLIENT_ID -u PAYPAL_CLIENT_SECRET -u PAYPAL_MODE -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u AI_API_KEY -u AI_PROVIDER -u AI_MODEL -u AI_BASE_URL -u AI_TIMEOUT -u CASHDESK_VAR_DIR -u CASHDESK_AS_OF"
+CLEAN="env -u PAYPAL_CLIENT_ID -u PAYPAL_CLIENT_SECRET -u PAYPAL_MODE -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u AI_API_KEY -u AI_PROVIDER -u AI_MODEL -u AI_BASE_URL -u AI_TIMEOUT -u CODEX_BIN -u CASHDESK_VAR_DIR -u CASHDESK_AS_OF"
 $CLEAN make test
 make -n demo >/dev/null   # the demo target resolves
 $CLEAN .venv/bin/python - <<'PY'

@@ -110,8 +110,8 @@ AG Grid board.
   A test walks every key in the sample data against the official schemas. The app refuses any base
   URL other than `api-m.sandbox.paypal.com`.
 - **AI, your choice of model:** Claude (`claude-sonnet-5-5`) through the Anthropic SDK, with a
-  server-side refusal fallback, or any OpenAI-compatible API (OpenAI, Mistral, Groq, OpenRouter, or a
-  local model through Ollama or llama-server), set in `.env`. Either way it is one structured-output
+  server-side refusal fallback, any OpenAI-compatible API, or an OpenAI model through the Codex CLI
+  signed in with a ChatGPT plan (no API key). Checked live: 31/31 on the eval, Lumen at 0.99. Either way it is one structured-output
   request per reconciliation, with the same prompt and JSON schema. The model's links are validated and
   re-run through the deterministic matcher. Payer-written notes are treated as untrusted data.
   Without an API key, a deterministic fallback keeps the whole demo working. An eval file with
@@ -131,8 +131,8 @@ AG Grid board.
 - **Making "the AI only suggests" real, not a slogan.** The AI cannot move money because no code
   path lets it. Its output is validated, re-matched and shown as "needs review". Every write goes
   through a policy check that also re-reads the stored proposal, so editing it after approval is caught.
-- **Grouping without Enterprise features.** Row grouping is an AG Grid Enterprise feature, so we
-  built status groups from Community features: full-width rows plus the external filter.
+- **Grouping without Enterprise.** Row grouping is Enterprise-only, so status groups use
+  full-width rows plus the external filter.
 - **Money.** Amounts arrive as strings and fees are negative. Everything is `Decimal`, and
   mixed-currency arithmetic raises an error.
 

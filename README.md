@@ -101,7 +101,14 @@ The AI layer is in `cashdesk/ai.py`, with the prompt in `cashdesk/prompts/reconc
   - **Any OpenAI-compatible chat-completions API:** OpenAI, Mistral, Groq, OpenRouter, or a local
     model through Ollama, llama-server or LM Studio. One request with a strict JSON schema
     (`response_format`). Set `AI_MODEL`, plus `AI_BASE_URL` and `AI_API_KEY` as your endpoint needs.
-  - Both go through the same prompt, schema and guard rails below.
+  - **An OpenAI model through the Codex CLI, signed in with a ChatGPT plan** (no API key):
+    `AI_PROVIDER=codex`, optionally `AI_MODEL` (default `gpt-6-sol`) and `CODEX_BIN`. One
+    `codex exec` per reconciliation, in a read-only sandbox inside an empty temporary folder, with
+    `--output-schema` forcing the same JSON. Run `codex login` once to sign in.
+  - All of them go through the same prompt, schema and guard rails below.
+  - Checked with a real hosted model on 2026-11-09: `gpt-6-sol` through Codex scored 31/31 on
+    `make eval` (74 s), resolved the Lumen Bakery memo case at 0.99 confidence, and every payment
+    reason it wrote on the live sandbox data passed the evidence check.
   - Checked against a real local model on 2026-11-09: a 27B model behind llama-server, through
     the OpenAI-compatible path, linked the Lumen Bakery payment to its invoice from the memo
     (confidence 0.98) and wrote cited reasons that passed the guard rails. It needed 343 seconds
@@ -218,6 +225,7 @@ field for field, and a test walks every key.
    with `PAYPAL_MODE=fixtures make demo`.
 5. Optional, for live AI matching and reasons, add one of these:
    - `ANTHROPIC_API_KEY=` for Claude;
+   - `AI_PROVIDER=codex` to use your ChatGPT plan through the Codex CLI (after `codex login`);
    - `AI_MODEL=`, `AI_API_KEY=` and, if it isn't OpenAI, `AI_BASE_URL=` for any OpenAI-compatible
      API. For a local Ollama model: `AI_PROVIDER=openai`, `AI_BASE_URL=http://localhost:11434/v1`,
      `AI_MODEL=<model>`, no key.

@@ -195,3 +195,19 @@ cashdesk-q00009`: a real partial refund of the tip, through the gate. Until Tran
 reports the refund row (about 2 hours), 0017 still shows as overpaid; fix 2 then turns it into a clean match.
 
 Audit chain: 27 records, verify OK. Head `28f02c6b343265e71c696420a8affeba8b218cf1e9a1ab60b3f42a3405a8d04b`.
+
+## S8: a hosted AI model on real data, through a ChatGPT sign-in (2026-11-09, ~19:45 UTC)
+
+`AI_PROVIDER=codex`: an OpenAI model (`gpt-6-sol`) through the local Codex CLI 0.157.0, signed in with
+the owner's ChatGPT plan (no API key). One `codex exec` per reconciliation, read-only sandbox, empty
+temporary folder, MCP servers off, `--output-schema` = the same JSON schema as the other providers.
+
+| Data | Result | Time |
+|---|---|---|
+| `make eval` (31 expected outcomes, sample data) | **31/31**, status `ai (codex: gpt-6-sol)` | 74 s |
+| Sample data, the memo-only case (NW-1021) | linked by the AI at **0.99**: "the note names Lumen Bakery's October website retainer, and 1500.00 USD equals the balance due" | 71 s |
+| Sample data, reasons | 26/26 payment and 25/26 invoice reasons passed the cited-field check | |
+| Live sandbox data (17 invoices, 30 rows) | 30/30 payment and 17/17 invoice reasons passed; the 0008 match and the refunded 0014 duplicate explained from the real fields | 58 s |
+
+The configured default model (`gpt-6.1-sol`) is refused for Codex with a ChatGPT account
+("not supported when using Codex with a ChatGPT account"), so `AI_MODEL` defaults to `gpt-6-sol`.
