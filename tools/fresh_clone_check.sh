@@ -20,13 +20,16 @@ c = TestClient(create_app())
 h = c.get("/api/health").json(); assert h == {"status": "ok", "paypal_mode": "fixtures", "version": h["version"]}, h
 r = c.get("/api/reconciliation").json()
 assert len(r["transactions"]) == 26 and len(r["invoices"]) == 26 and r["ai_status"].startswith("fallback"), r["ai_status"]
-assert c.post("/api/proposals/refresh").json()["enqueued"] == 6
+assert c.post("/api/proposals/refresh").json()["enqueued"] == 7
 item = next(i for i in c.get("/api/approvals").json()["items"] if i["proposal"]["type"] == "refund_capture")
-assert c.post(f"/api/approvals/{item['id']}/approve", json={"by": "judge"}).json()["status"] == "approved"
+assert c.post(f"/api/approvals/{item['id']}/approve", json={"by": "judge"}).json()["status"] == "awaiting_second"
+assert c.post(f"/api/approvals/{item['id']}/execute").status_code == 409  # one approver is not enough
+assert c.post(f"/api/approvals/{item['id']}/approve", json={"by": "second judge"}).json()["status"] == "approved"
 assert c.post(f"/api/approvals/{item['id']}/execute").json()["status"] == "executed"
-a = c.get("/api/audit").json(); assert a["verify"]["ok"] and a["verify"]["count"] == 9, a["verify"]
+a = c.get("/api/audit").json(); assert a["verify"]["ok"] and a["verify"]["count"] == 11, a["verify"]
+j = c.get("/api/export/journal.csv"); assert j.status_code == 200 and j.text.startswith("date,entry_id,account")
 assert "Cash Desk for PayPal" in c.get("/").text
-print("SMOKE OK: health, 26/26 rows, 6 proposals, refund executed, audit chain of 9 verified")
+print("SMOKE OK: health, 26/26 rows, 7 proposals, two-person refund executed, journal export, audit chain of 11 verified")
 PY
 $CLEAN make audit-verify
 echo "FRESH CLONE OK ($TMP, removed on exit)"
