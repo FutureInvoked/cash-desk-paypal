@@ -161,9 +161,13 @@ invoice_number, paypal_transaction_id, event_code, memo`.
 | Overpayment | PayPal balance, PayPal fees | Accounts receivable (invoice part), Customer credits (excess) |
 | Duplicate payment | PayPal balance, PayPal fees | Customer credits |
 | Payment with no invoice, or in the wrong currency | PayPal balance, PayPal fees | Unapplied payments |
-| Refund | Customer credits (duplicate or overpayment) or Accounts receivable | PayPal balance, PayPal fees (fee returned) |
+| Refund paid out | Whatever the original payment credited first: Customer credits (duplicate or overpayment excess), Unapplied payments (no invoice, wrong currency), then Accounts receivable | PayPal balance, PayPal fees (fee returned) |
+| Incoming refund (a positive T1107/T1106: money back to you) | PayPal balance | Unapplied payments, to classify |
 
-Pending payments, currency conversions and bank withdrawals are not booked. Account names are plain
+Pending payments, currency conversions and bank withdrawals are not booked, so this is a sales and
+refunds subledger, not the whole PayPal statement. Each line is dated by the row's
+`transaction_initiation_date`, the cut-off to use at month end. A negative amount (a fee larger than
+the payment) goes on the other side of the same account, so debit and credit are never negative. Account names are plain
 so they can be mapped to any chart of accounts. Text that payers wrote is escaped so a spreadsheet
 can't run it as a formula.
 

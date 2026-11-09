@@ -92,11 +92,11 @@ class Desk:
 
     def reconciliation(self) -> dict:
         r = self.result()
-        txns = {(t.id, t.event_code): t for t in self.store.transactions()}  # ids repeat across event codes
+        txns = {(t.id, t.event_code, t.status): t for t in self.store.transactions()}  # ids repeat across event codes
         invs = {i.number: i for i in self.store.invoices()}
         rows = []
         for x in r.transactions:
-            t = txns[(x.txn_id, x.event_code)]
+            t = txns[(x.txn_id, x.event_code, x.status)]
             rows.append({
                 "txn_id": x.txn_id, "event_code": x.event_code, "status": t.status, "outcome": x.outcome,
                 "rule": x.rule, "invoice_number": x.invoice_number, "invoice_id": x.invoice_id,
@@ -128,7 +128,7 @@ class Desk:
         unrec: dict[str, Decimal] = {}
         for x in r.transactions:
             if x.outcome in UNRECONCILED:
-                a = txns[(x.txn_id, x.event_code)].amount
+                a = txns[(x.txn_id, x.event_code, x.status)].amount
                 unrec[a.currency] = unrec.get(a.currency, Decimal("0")) + a.amount
         outstanding: dict[str, Decimal] = {}
         for x in r.invoices:

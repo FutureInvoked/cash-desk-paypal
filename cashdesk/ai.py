@@ -86,8 +86,8 @@ def candidates(result: MatchResult, invoices: list[Invoice], t: Transaction) -> 
 
 
 def _unmatched(result: MatchResult, txns: list[Transaction]) -> list[Transaction]:
-    keys = {(r.txn_id, r.event_code) for r in result.transactions if r.outcome == "unmatched"}
-    return [t for t in txns if (t.id, t.event_code) in keys]
+    keys = {(r.txn_id, r.event_code, r.status) for r in result.transactions if r.outcome == "unmatched"}
+    return [t for t in txns if (t.id, t.event_code, t.status) in keys]
 
 
 def _inv_brief(i: Invoice, r: InvoiceResult | None) -> dict:
@@ -510,7 +510,7 @@ def _first_ref(ev: dict) -> str:
 
 
 def txn_reason(r: TxnResult, txns: dict[tuple[str, str], Transaction]) -> str:
-    t = txns.get((r.txn_id, r.event_code))
+    t = txns.get((r.txn_id, r.event_code, r.status))
     amt = str(t.amount) if t else "?"
     ev = r.evidence
     email = ev.get("payer_info.email_address", "unknown payer")
@@ -548,7 +548,7 @@ def txn_reason(r: TxnResult, txns: dict[tuple[str, str], Transaction]) -> str:
     if r.outcome == "overpaid":
         return f"Overpaid {n} by {r.difference}: {_first_ref(ev)}; offer a refund or credit."
     if r.outcome == "duplicate":
-        orig = next((x for (i, _c), x in txns.items() if i == r.duplicate_of and x.amount.amount > 0), None)
+        orig = next((x for k, x in txns.items() if k[0] == r.duplicate_of and x.amount.amount > 0), None)
         mins = int((t.initiated - orig.initiated).total_seconds() // 60) if t and orig else 0
         return (f"Duplicate of {r.duplicate_of} for {n}: same payer_info.email_address, same amount {amt}, "
                 f"{mins} min apart, invoice already covered; refund candidate.")
@@ -614,7 +614,7 @@ def reconcile(invoices: list[Invoice], txns: list[Transaction], *, as_of: date, 
     except InvalidAIOutput as e:
         sug = fallback_suggestions(first, invoices, txns, f"fallback (invalid AI output: {e})")
     final = match(invoices, txns, as_of=as_of, links=sug.links) if sug.links else first
-    by_id = {(t.id, t.event_code): t for t in txns}  # ids repeat across event codes
+    by_id = {(t.id, t.event_code, t.status): t for t in txns}  # ids repeat across event codes
     for r in final.transactions:
         if row_id(r) in sug.reasons and r.outcome == first.txn(r.txn_id, r.event_code).outcome:
             r.reason, r.reason_source = sug.reasons[row_id(r)], "ai"

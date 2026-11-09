@@ -196,8 +196,19 @@ def test_5_partly_paid_invoice_with_no_local_payments_owes_only_the_rest():
             assert p.amount == USD("40.00")
 
 
-def test_5_old_payment_plus_current_payment_settles_the_invoice():
+def test_5_aggregate_only_paid_amount_is_read_conservatively():
+    # review A: a paid_amount with no payment list might already include the local payment, so it
+    # only counts beyond what local rows explain (it must never create a refundable excess)
     i = inv(status="PARTIALLY_PAID", paid="60.00", due_date=date(2026, 11, 1))
+    now = txn("PAYC00000000015", "40.00", T0)
+    r, props = run([i], [now])
+    assert r.invoice_by_number("INV-1").received == USD("60.00")
+    assert not [p for p in props if p.type.startswith("refund")]
+
+
+def test_5_old_payment_plus_current_payment_settles_the_invoice():
+    old = [{"payment_id": "OLDPAY000000005", "amount": USD("60.00").to_paypal(), "method": "PAYPAL"}]
+    i = inv(status="PARTIALLY_PAID", paid="60.00", due_date=date(2026, 11, 1), payments=old)
     now = txn("PAYC00000000005", "40.00", T0)
     r, props = run([i], [now])
     x = r.invoice_by_number("INV-1")

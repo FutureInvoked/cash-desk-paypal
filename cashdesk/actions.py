@@ -51,7 +51,7 @@ def _call(method: str, path: str, body: dict | None) -> dict:
 
 def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction], *, as_of: date) -> list[Proposal]:
     inv_by_num = {i.number: i for i in invoices}
-    txn_by_key = {(t.id, t.event_code): t for t in txns}  # ids repeat across event codes
+    txn_by_key = {(t.id, t.event_code, t.status): t for t in txns}  # ids repeat across event codes
     out: list[Proposal] = []
 
     # 1. reminders for overdue invoices
@@ -77,17 +77,18 @@ def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction
         ))
 
     for r in result.transactions:
-        t = txn_by_key.get((r.txn_id, r.event_code))
+        t = txn_by_key.get((r.txn_id, r.event_code, r.status))
         if t is None:
             continue
         # 2. refund the duplicate capture
         if r.outcome == "duplicate":
-            body = {"amount": t.amount.to_paypal(),
+            left = r.difference if r.difference is not None and r.difference.amount > 0 else t.amount  # unrefunded part
+            body = {"amount": left.to_paypal(),
                     "note_to_payer": f"Refund of a duplicate payment for invoice {r.invoice_number}. "
                                      f"Your first payment was received; thank you.",
                     "invoice_id": r.invoice_number}
             out.append(Proposal(
-                _pid("refund_capture", t.id), "refund_capture", t.id, r.invoice_number, t.amount,
+                _pid("refund_capture", t.id), "refund_capture", t.id, r.invoice_number, left,
                 [_call("POST", f"/v2/payments/captures/{t.id}/refund", body)],
                 f"Refund the duplicate payment: {r.reason}",
                 dict(r.evidence),
