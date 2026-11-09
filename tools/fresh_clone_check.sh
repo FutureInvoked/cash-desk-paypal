@@ -16,7 +16,7 @@ make -n demo >/dev/null   # the demo target resolves
 $CLEAN .venv/bin/python - <<'PY'
 from fastapi.testclient import TestClient
 from cashdesk.app import create_app
-c = TestClient(create_app())
+c = TestClient(create_app(), base_url="http://127.0.0.1:8000")  # a real board host
 h = c.get("/api/health").json(); assert h == {"status": "ok", "paypal_mode": "fixtures", "version": h["version"]}, h
 r = c.get("/api/reconciliation").json()
 assert len(r["transactions"]) == 26 and len(r["invoices"]) == 26 and r["ai_status"].startswith("fallback"), r["ai_status"]
