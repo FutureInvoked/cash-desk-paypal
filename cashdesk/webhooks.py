@@ -38,6 +38,7 @@ MAX_ID = 128          # event id and transmission id (PayPal's are ~40 character
 MAX_TYPE = 100        # event type names are ~40 characters
 REJECT_LIMIT = 20     # unverified events allowed per window before answering 429 without calling PayPal
 REJECT_WINDOW = 600.0
+GLOBAL_FACTOR = 15  # unverified deliveries across all sources in a window: 15x the per-source limit
 CLAIM_LEASE = 120  # seconds a processing claim is held before another delivery may take it over
 
 SCHEMA = """
@@ -104,6 +105,7 @@ class RejectLimiter:
     def __init__(self, limit: int = REJECT_LIMIT, window: float = REJECT_WINDOW, clock=time.monotonic):
         self.limit, self.window, self.clock = limit, window, clock
         self.hits: dict[str, deque[float]] = {}
+        self.all: deque[float] = deque()
         self.lock = threading.Lock()
 
     def blocked(self, source: str = "-") -> bool:
@@ -112,13 +114,17 @@ class RejectLimiter:
             q = self.hits.get(source)
             while q and now - q[0] > self.window:
                 q.popleft()
+            while self.all and now - self.all[0] > self.window:
+                self.all.popleft()
             if len(self.hits) > 10_000:  # bound memory: forget sources with nothing recent
                 self.hits = {k: v for k, v in self.hits.items() if v}
-            return bool(q) and len(q) >= self.limit
+            # and a ceiling across all sources, so naming many sources can't buy unlimited PayPal calls
+            return (bool(q) and len(q) >= self.limit) or len(self.all) >= self.limit * GLOBAL_FACTOR
 
     def add(self, source: str = "-") -> None:
         with self.lock:
             self.hits.setdefault(source, deque()).append(self.clock())
+            self.all.append(self.clock())
 
 
 def handle(desk, raw: bytes, headers, limiter: RejectLimiter | None = None, source: str = "-") -> tuple[int, dict]:

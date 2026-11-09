@@ -33,7 +33,8 @@ EXCEPTIONS = {"partial", "overpaid", "duplicate", "unmatched", "fee_mismatch", "
 
 OPEN_STATUSES = {"SENT", "UNPAID", "PARTIALLY_PAID", "PAYMENT_PENDING", "SCHEDULED"}
 PAID_STATUSES = {"PAID", "MARKED_AS_PAID", "PAID_EXTERNAL"}
-REFUND_CODES = {"T1107", "T1106"}  # refund, payment reversal (docs/paypal-api-notes.md)
+REFUND_CODES = {"T1107", "T1106", "T1201"}  # refund, payment reversal, chargeback (docs/paypal-api-notes.md)
+SUGGESTED = ("ai", "memo_heuristic")  # rules for links from outside the deterministic rules
 FEE_RATE = {"USD": (Decimal("0.0349"), Decimal("0.49")), "EUR": (Decimal("0.0349"), Decimal("0.39"))}
 FEE_SLACK = Decimal("0.05")
 DUPLICATE_WINDOW = timedelta(hours=24)
@@ -80,6 +81,8 @@ class TxnResult:
     needs_review: bool = False
     reason: str = ""
     reason_source: str = ""  # ai | rules
+    rules_reason: str = ""  # the deterministic reason, kept even when the AI's own text is shown
+    held: Money | None = None  # refunds of this payment PayPal still shows as pending
 
 
 @dataclass
@@ -96,6 +99,7 @@ class InvoiceResult:
     last_sent: str | None = None
     reason: str = ""
     reason_source: str = ""
+    rules_reason: str = ""
 
 
 @dataclass
@@ -196,6 +200,9 @@ class _History:
     pay_unlisted: Decimal = Decimal("0")  # paid_amount beyond the listed payments: may overlap local rows
     ref_unseen: Decimal = Decimal("0")   # listed refunds with no local refund row
     ref_unlisted: Decimal = Decimal("0")  # refund_amount beyond the listed refunds: may overlap local rows
+    pay_total: Decimal = Decimal("0")     # paid_amount
+    pay_listed: bool = False              # PayPal listed the payments (we know exactly which it holds)
+    pay_ids: frozenset = frozenset()      # the listed payment ids
 
 
 def _history(inv: Invoice, local_pay: set[str], local_ref: set[str]) -> _History:
@@ -228,6 +235,10 @@ def _history(inv: Invoice, local_pay: set[str], local_ref: set[str]) -> _History
         return unseen, max(amt(block.get(total_key)) - listed_sum, Decimal("0"))
 
     h = _History()
+    pays = inv.raw.get("payments") if isinstance(inv.raw.get("payments"), dict) else {}
+    h.pay_total = amt(pays.get("paid_amount"))
+    h.pay_listed = isinstance(pays.get("transactions"), list)
+    h.pay_ids = frozenset(e.get("payment_id") for e in (pays.get("transactions") or []) if isinstance(e, dict))
     h.pay_unseen, h.pay_unlisted = split(inv.raw.get("payments"), "paid_amount", "payment_id", local_pay, True)
     h.ref_unseen, h.ref_unlisted = split(inv.raw.get("refunds"), "refund_amount", "refund_id", local_ref, False)
     return h
@@ -244,7 +255,7 @@ def _same_email(a: str | None, b: str | None) -> bool:
 
 
 def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: date,
-          links: dict[str, Link] | None = None) -> MatchResult:
+          links: dict[str, Link | list[Link]] | None = None) -> MatchResult:
     """Run the rules. `links` are AI/heuristic suggestions applied only to payments the rules
     left unmatched, and only to open invoices in the same currency.
 
@@ -279,6 +290,7 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
 
     # ---- pass 1: non-payments, refunds, pending, reversed, and rule 1 ----
     unresolved: list[Transaction] = []
+    payment_codes: dict[tuple[str, str], str] = {}
     for t in txns:
         ev = base_ev(t)
         if t.event_code in REFUND_CODES:
@@ -294,6 +306,10 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
             continue
         if not is_payment(t) or t.status == "D":
             res(t, "ignored", evidence=ev)
+            continue
+        first_code = payment_codes.setdefault((t.id, t.status), t.event_code)
+        if first_code != t.event_code:  # one capture reported under two event codes is one payment
+            res(t, "ignored", evidence=ev | {"same_payment_as": f"{t.id}:{first_code}"})
             continue
         inv, rev = _find_by_reference(t, invoices)
         if t.status in ("P", "V"):
@@ -340,22 +356,47 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
         if inv is not None and inv.total.currency == t.amount.currency:
             unattributed[inv.id] = unattributed.get(inv.id, Decimal("0")) + abs(t.amount.amount)
 
+    # refunds PayPal still shows as pending: not money moved yet (not booked, not taken off received),
+    # but held back from anything refundable, so the same money is never offered twice
+    held_on: dict[str, Decimal] = {}
+    held_inv: dict[str, Decimal] = {}
+    for t in txns:
+        if t.event_code in REFUND_CODES and t.status == "P" and t.amount.amount < 0:
+            if t.reference_id and t.reference_id in local_pay:
+                held_on[t.reference_id] = held_on.get(t.reference_id, Decimal("0")) + abs(t.amount.amount)
+            elif results[t.key].invoice_id:
+                iid = results[t.key].invoice_id
+                held_inv[iid] = held_inv.get(iid, Decimal("0")) + abs(t.amount.amount)
+
     def net(t: Transaction) -> Decimal:
         return t.amount.amount - min(refunded_amt.get(t.id, Decimal("0")), t.amount.amount)
 
-    def opening(inv: Invoice, local_net: Decimal) -> Decimal:
+    def opening(inv: Invoice, local_net: Decimal, local_gross: Decimal | None = None) -> Decimal:
         """What the invoice had received before the local payments: PayPal's history (an unlisted lump
         sum only beyond what local rows explain), less refunds not tied to a local payment."""
         h = hist[inv.id]
+        # An unlisted refund total may overlap only local refunds of payments PayPal itself holds on
+        # the invoice: the ones it lists, or (totals only) all local payments, if its paid total can
+        # include them all. Anything else is taken as a separate refund, so received is never read
+        # higher than the evidence allows and no excess is made up.
+        mine = applied.get(inv.id, [])
+        if h.pay_listed:
+            held_by_paypal = [x for x, _ in mine if x.id in h.pay_ids]
+        elif sum((x.amount.amount for x, _ in mine), Decimal("0")) <= h.pay_total:
+            held_by_paypal = [x for x, _ in mine]
+        else:
+            held_by_paypal = []
         local_refunds = sum((min(refunded_amt.get(x.id, Decimal("0")), x.amount.amount)
-                             for x, _ in applied.get(inv.id, [])), Decimal("0")) + unattributed.get(inv.id, Decimal("0"))
-        return (h.pay_unseen + max(h.pay_unlisted - local_net, Decimal("0"))
+                             for x in held_by_paypal), Decimal("0"))
+        gross = local_net if local_gross is None else local_gross
+        return (h.pay_unseen + max(h.pay_unlisted - gross, Decimal("0"))
                 - h.ref_unseen - max(h.ref_unlisted - local_refunds, Decimal("0"))
                 - unattributed.get(inv.id, Decimal("0")))
 
     def received_now(inv: Invoice) -> Decimal:
         local_net = sum((net(x) for x, _ in applied.get(inv.id, [])), Decimal("0"))
-        return opening(inv, local_net) + local_net
+        local_gross = sum((x.amount.amount for x, _ in applied.get(inv.id, [])), Decimal("0"))
+        return opening(inv, local_net, local_gross) + local_net
 
     # ---- pass 2: rules 2 and 3 against open invoices not yet covered ----
     def covered(inv: Invoice) -> bool:
@@ -364,19 +405,28 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
     def open_for_rules(inv: Invoice) -> bool:
         return inv.status in OPEN_STATUSES and not covered(inv)
 
+    linked: set[str] = set()  # a link names a transaction id; it applies to one row
     for t in unresolved:
         ev = base_ev(t)
-        link = links.get(t.id)
-        if link:
+        options = links.get(t.id) if t.id not in linked else None
+        options = [options] if isinstance(options, Link) else list(options or [])
+        for link in options:  # the AI's link first; if it can't apply, the memo heuristic's
             inv = next((i for i in invoices if i.number == link.invoice_number), None)
-            if inv and open_for_rules(inv) and inv.total.currency == t.amount.currency:
+            # a suggested link may only fill what the invoice still owes (with what this payment still
+            # holds after refunds): it can never create an overpayment, a duplicate or anything else a
+            # refund could be proposed from
+            if inv and open_for_rules(inv) and inv.total.currency == t.amount.currency \
+                    and net(t) <= inv.total.amount - received_now(inv):
+                linked.add(t.id)
                 r = res(t, "matched", rule=link.rule, invoice_id=inv.id, invoice_number=inv.number,
                         evidence=ev | link.evidence | {"invoice.detail.invoice_number": inv.number,
                                                        "invoice.amount": str(inv.total)},
                         resolved_by=link.resolved_by, confidence=link.confidence,
-                        needs_review=link.confidence < 0.8)
+                        needs_review=True)  # a suggestion: always reviewed by a person
                 applied.setdefault(inv.id, []).append((t, r))
-                continue
+                break
+        if t.id in linked:
+            continue
         same_payer = [i for i in invoices if open_for_rules(i) and _same_email(t.payer_email, i.recipient_email)
                       and i.total.currency == t.amount.currency]
         exact = [i for i in same_payer if i.total.amount - received_now(i) == t.amount.amount]
@@ -402,7 +452,7 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
             applied.setdefault(inv.id, []).append((t, r))
             continue
         twins = [(i, x) for i in invoices if i.total.currency == t.amount.currency
-                 for x, _ in applied.get(i.id, []) if x.amount == t.amount
+                 for x, xr in applied.get(i.id, []) if x.amount == t.amount and xr.rule not in SUGGESTED
                  and _same_email(x.payer_email, t.payer_email) and abs(x.initiated - t.initiated) <= DUPLICATE_WINDOW]
         if len({i.id for i, _ in twins}) == 1:  # same payer paid the same amount for one invoice: a duplicate pair
             inv, twin = twins[0]
@@ -428,7 +478,8 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
         pays.sort(key=lambda p: (p[0].initiated, p[0].id))
         inv = by_id[inv_id]
         total, ccy = inv.total.amount, inv.total.currency
-        running = start[inv_id] = opening(inv, sum((net(x) for x, _ in pays), Decimal("0")))
+        running = start[inv_id] = opening(inv, sum((net(x) for x, _ in pays), Decimal("0")),
+                                          sum((x.amount.amount for x, _ in pays), Decimal("0")))
         first = True
         for t, r in pays:
             back = min(refunded_amt.get(t.id, Decimal("0")), t.amount.amount)
@@ -445,6 +496,8 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
                     r.outcome, r.difference = "refunded", Money(Decimal("0"), ccy)
                 else:
                     r.outcome, r.difference = "duplicate", Money(t.amount.amount - back, ccy)
+                    if held_on.get(t.id):
+                        r.held = Money(min(held_on[t.id], t.amount.amount - back), ccy)
                     if back:
                         r.evidence["refunded_amount"] = str(Money(back, ccy))
                 continue
@@ -482,6 +535,19 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
                 r.outcome = "overpaid"
                 # this payment's own excess: an earlier overpayment's excess is not refundable from it
                 r.difference = Money(min(running - total, t.amount.amount - back), ccy)
+                if held_on.get(t.id):
+                    r.held = Money(min(held_on[t.id], r.difference.amount), ccy)
+        # pending refunds that name the invoice but no payment: held against its overpaid payments
+        left = held_inv.get(inv_id, Decimal("0"))
+        for t, r in pays:
+            if left <= 0:
+                break
+            if r.outcome == "overpaid" and r.difference is not None:
+                room = r.difference.amount - (r.held.amount if r.held else Decimal("0"))
+                take = min(left, max(room, Decimal("0")))
+                if take:
+                    r.held = Money((r.held.amount if r.held else Decimal("0")) + take, ccy)
+                    left -= take
 
     # ---- invoices ----
     inv_results: list[InvoiceResult] = []

@@ -22,9 +22,9 @@ r = c.get("/api/reconciliation").json()
 assert len(r["transactions"]) == 26 and len(r["invoices"]) == 26 and r["ai_status"].startswith("fallback"), r["ai_status"]
 assert c.post("/api/proposals/refresh").json()["enqueued"] == 7
 item = next(i for i in c.get("/api/approvals").json()["items"] if i["proposal"]["type"] == "refund_capture")
-assert c.post(f"/api/approvals/{item['id']}/approve", json={"by": "judge"}).json()["status"] == "awaiting_second"
+assert c.post(f"/api/approvals/{item['id']}/approve", json={"by": "judge", "proposal_hash": item["proposal_hash"]}).json()["status"] == "awaiting_second"
 assert c.post(f"/api/approvals/{item['id']}/execute").status_code == 409  # one approver is not enough
-assert c.post(f"/api/approvals/{item['id']}/approve", json={"by": "second judge"}).json()["status"] == "approved"
+assert c.post(f"/api/approvals/{item['id']}/approve", json={"by": "second judge", "proposal_hash": item["proposal_hash"]}).json()["status"] == "approved"
 assert c.post(f"/api/approvals/{item['id']}/execute").json()["status"] == "executed"
 a = c.get("/api/audit").json(); assert a["verify"]["ok"] and a["verify"]["count"] == 11, a["verify"]
 j = c.get("/api/export/journal.csv"); assert j.status_code == 200 and j.text.startswith("date,entry_id,account")

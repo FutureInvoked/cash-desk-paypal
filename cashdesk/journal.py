@@ -73,6 +73,9 @@ def journal(result: MatchResult, txns: list[Transaction]) -> list[dict]:
                 credit_left[r.txn_id] = Decimal(r.evidence["overpaid_by"].split()[0])
             elif _unapplied(r):
                 unapplied_left[r.txn_id] = t0.amount.amount
+    # a reversed payment (status V) is cash only alongside the row that took the money back; without
+    # that row in this export (not reported yet, or outside the window) neither side is booked
+    reversed_back = {t.reference_id for t in txns if t.reference_id and t.amount.amount < 0 and t.status == "S"}
     lines: list[dict] = []
 
     for r in result.transactions:
@@ -92,6 +95,8 @@ def journal(result: MatchResult, txns: list[Transaction]) -> list[dict]:
                           "currency": ccy, "invoice_number": r.invoice_number or "",
                           "paypal_transaction_id": t.id, "event_code": t.event_code, "memo": memo})
 
+        if r.outcome in PAYMENT_OUTCOMES and t.status == "V" and t.id not in reversed_back:
+            continue
         if r.outcome in PAYMENT_OUTCOMES:
             gross = t.amount.amount
             fee = -t.fee.amount if t.fee and t.fee.amount < 0 else ZERO
@@ -146,9 +151,15 @@ def _unapplied(r) -> bool:
     return r.outcome in ("unmatched", "currency_mismatch") or (r.outcome == "refunded" and not r.invoice_number)
 
 
+FORMULA_START = set("=+-@\uff1d\uff0b\uff0d\uff20")  # and their fullwidth forms
+
+
 def _safe(v: str) -> str:
-    # spreadsheet formula injection: payer-written text could start with = + - @
-    return "'" + v if v and v[0] in "=+-@\t\r" and not _is_number(v) else v
+    # spreadsheet formula injection: payer-written text could start (after spaces) with = + - @
+    head = v.lstrip(" \t\r\n\xa0\u3000")
+    if v and (v[0] in "\t\r\n" or (head[:1] in FORMULA_START)) and not _is_number(v):
+        return "'" + v
+    return v
 
 
 def _is_number(v: str) -> bool:

@@ -121,7 +121,7 @@ def test_claude_resolution_and_reasons_are_applied():
     r = reconcile(invs, txns, as_of=AS_OF, reconciler=ClaudeReconciler(client=client))
     t = r.txn(LUMEN)
     assert t.outcome == "matched" and t.rule == "ai" and t.resolved_by == "ai"
-    assert t.confidence == pytest.approx(0.92) and t.needs_review is False
+    assert t.confidence == pytest.approx(0.92) and t.needs_review is True  # every suggested link is reviewed
     assert t.reason_source == "ai" and "Lumen Bakery" in t.reason
     assert r.txn(txn_id("NW-1001")).reason_source == "ai"
 

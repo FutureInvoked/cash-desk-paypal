@@ -329,8 +329,13 @@ def test_l6_a_flood_from_one_source_does_not_lock_out_paypal(tmp_path, monkeypat
     from fastapi.testclient import TestClient
     from cashdesk.service import Desk
     from cashdesk.webhook_app import create_webhook_app
+    monkeypatch.setenv("CASHDESK_TRUST_CF_CONNECTING_IP", "1")  # a Cloudflare tunnel is in front
     v = Verifier("FAILURE")
-    api = TestClient(create_webhook_app(Desk(client=v, reconciler=FallbackReconciler(), clock=lambda: T0)))
+    inner = create_webhook_app(Desk(client=v, reconciler=FallbackReconciler(), clock=lambda: T0))
+
+    async def via_cloudflared(scope, receive, send):  # cloudflared connects from this machine
+        await inner({**scope, "client": ("127.0.0.1", 40000)}, receive, send)
+    api = TestClient(via_cloudflared)
     h = {**HEADERS, "Content-Type": "application/json"}
     for i in range(REJECT_LIMIT + 3):
         api.post("/webhooks/paypal", content=event(eid=f"F{i}"), headers={**h, "CF-Connecting-IP": "203.0.113.9"})

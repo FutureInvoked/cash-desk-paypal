@@ -26,6 +26,18 @@ def create_webhook_app(desk=None) -> FastAPI:
             state["desk"] = Desk()
         return state["desk"]
 
+    def webhook_source(request: Request) -> str:
+        """Who sent it, for the reject limiter. Behind a Cloudflare tunnel every request comes from
+        cloudflared on 127.0.0.1 and Cloudflare sets CF-Connecting-IP to the real client (overwriting
+        any the sender wrote). That header is trusted only when the operator says a Cloudflare tunnel
+        is in front (CASHDESK_TRUST_CF_CONNECTING_IP=1) and the request came from this machine;
+        otherwise a sender could name a new source on every request."""
+        peer = request.client.host if request.client else "-"
+        cf = request.headers.get("cf-connecting-ip")
+        if cf and os.environ.get("CASHDESK_TRUST_CF_CONNECTING_IP") == "1" and peer in ("127.0.0.1", "::1"):
+            return cf[:64]
+        return peer
+
     @app.post("/webhooks/paypal")
     async def paypal(request: Request) -> JSONResponse:
         # read at most MAX_BODY + 1 bytes, whatever Content-Length says (chunked bodies have none)
@@ -41,8 +53,7 @@ def create_webhook_app(desk=None) -> FastAPI:
             if len(buf) > MAX_BODY:
                 return JSONResponse({"status": "rejected", "error": "body too large"}, status_code=413)
         # PayPal verify and the re-sync are blocking network calls: keep them off the event loop
-        # behind a Cloudflare tunnel every request comes from 127.0.0.1; Cloudflare sets the real client
-        source = request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "-")
+        source = webhook_source(request)
         status, body = await run_in_threadpool(handle, d(), bytes(buf), dict(request.headers), source=source)
         return JSONResponse(body, status_code=status)
 

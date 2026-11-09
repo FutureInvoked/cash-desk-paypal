@@ -4,11 +4,16 @@ Lifecycle:  enqueue -> pending | blocked
             pending -> approved (human) | rejected (human) | expired
             pending -> awaiting_second (first of two approvers, for large refunds) -> approved (a
                        different second approver) | rejected | expired
-            approved -> executing -> executed | failed (retryable with the same request id)
+            approved -> executing -> executed | declined (PayPal said no) | failed (retryable with
+                       the same request id)
+            approved or failed, PayPal never acted -> rejected | withdrawn (the approval isn't in
+                       the audit log; proposed again) | expired
 The policy (cashdesk/policy.py) runs at enqueue, at approval and again right before execution,
-against the proposal as stored now, so tampering, expiry, rate bursts and duplicate intents are
-caught at the last moment. Each item executes with PayPal-Request-Id = cashdesk-<item id>; an
-executed item returns its stored result and is never sent twice.
+against the proposal as stored now and limits re-read from the latest sync, so tampering, expiry,
+rate bursts and duplicate intents are caught at the last moment. The hour being full or the clock
+having moved refuses a step without blocking the item. Each item executes with PayPal-Request-Id =
+cashdesk-<item id>-<random>, fixed at enqueue; an executed item returns its stored result and is never
+sent again. Every transition's audit record is written inside its database transaction.
 """
 
 from __future__ import annotations
@@ -58,7 +63,7 @@ create table if not exists queue_items (
 # queue status -> what the policy's history sees
 HISTORY_STATUS = {"pending": "pending", "awaiting_second": "pending", "approved": "approved", "executing": "approved", "failed": "approved",
                   "executed": "executed", "rejected": "rejected", "blocked": "rejected", "expired": "expired",
-                  "declined": "rejected"}
+                  "declined": "rejected", "withdrawn": "rejected"}
 EXECUTABLE = {"approved", "executing", "failed"}
 
 
@@ -85,12 +90,17 @@ def proposal_from_dict(d: dict) -> Proposal:
     return Proposal(**d)
 
 
+# letters that render as nothing (Hangul fillers, braille blank): not a name
+INVISIBLE = set("\u115f\u1160\u3164\uffa0\u2800")
+
+
 def _person(name: str | None) -> str:
     """Compare approver names as people would read them: NFKC (fullwidth -> ASCII), no invisible
     format characters (zero-width spaces), no spaces, case-folded."""
     import unicodedata
     n = unicodedata.normalize("NFKC", name or "")
-    n = "".join(ch for ch in n if unicodedata.category(ch) not in ("Cf", "Cc", "Zs") and not ch.isspace())
+    n = "".join(ch for ch in n if unicodedata.category(ch) not in ("Cf", "Cc", "Zs") and not ch.isspace()
+                and ch not in INVISIBLE)
     return n.casefold()
 
 
@@ -134,7 +144,8 @@ class QueueItem:
 
     def to_dict(self) -> dict:
         p = proposal_to_dict(self.proposal)
-        return {"id": self.id, "status": self.status, "proposal": p, "policy": self.policy,
+        return {"id": self.id, "status": self.status, "proposal": p, "proposal_hash": proposal_hash(self.proposal),
+                "policy": self.policy,
                 "created_at": _iso(self.created_at), "decided_at": _iso(self.decided_at),
                 "decided_by": self.decided_by, "note": self.note, "request_id": self.request_id,
                 "executed_at": _iso(self.executed_at), "result": self.result, "error": self.error,
@@ -262,9 +273,25 @@ class ApprovalQueue:
                                  history=self.history(exclude=item.id), invoice_due=item.invoice_due,
                                  request_id=request_id)
 
+    # Violations that are about *now* (the hour is full, the clock moved), not about the action:
+    # they refuse the step and leave the item where it was, instead of blocking it for good.
+    TRANSIENT = {"rate_cap", "clock_skew"}
+
     def enqueue(self, p: Proposal, *, invoice_due: Money | None = None) -> QueueItem:
+        return self._enqueue(p, invoice_due, only_new=False)
+
+    def enqueue_new(self, p: Proposal, *, invoice_due: Money | None = None) -> QueueItem | None:
+        """Enqueue unless this intent already has an item (live, done, blocked or rejected): checked in
+        the same transaction as the insert, so two simultaneous "Propose actions" add it once."""
+        return self._enqueue(p, invoice_due, only_new=True)
+
+    def _enqueue(self, p: Proposal, invoice_due, *, only_new: bool) -> QueueItem | None:
         now = self.clock()
-        with self._conn() as con:
+        with self._locked() as con:
+            if only_new and con.execute(
+                    "select 1 from queue_items where intent_key = ? and status not in ('expired', 'declined', 'withdrawn')",
+                    (p.intent_key,)).fetchone():
+                return None
             seq = con.execute("select coalesce(max(seq), 0) + 1 from queue_items").fetchone()[0]
             item_id = f"q{seq:05d}"
             # unique across databases and reinstalls: q00001 restarts, the random part doesn't
@@ -274,11 +301,12 @@ class ApprovalQueue:
                                             status, policy, created_at, request_id) values (?,?,?,?,?,?,?,?,?,?,?)""",
                 (item_id, p.id, p.intent_key, p.type, p.target, json.dumps(proposal_to_dict(p)),
                  json.dumps(invoice_due.to_paypal()) if invoice_due else None, "pending", "{}", _iso(now), request_id))
-        item = self.get(item_id)
-        d = self._check(item)
-        item = self._update(item_id, status="pending" if d.allowed else "blocked", policy=json.dumps(d.to_dict()))
-        self._emit("enqueued" if d.allowed else "blocked", item, violations=d.violations)
-        return item
+            item = self._read(con, item_id)
+            d = self._check(item)
+            ok = d.allowed or set(d.codes) <= self.TRANSIENT
+            self._write(con, item_id, status="pending" if ok else "blocked", policy=json.dumps(d.to_dict()))
+            self._emit_in(con, "enqueued" if ok else "blocked", item_id, violations=d.violations)
+        return self.get(item_id)
 
     def _block(self, item: QueueItem, d) -> None:
         """Outside a transition: record the block and raise."""
@@ -293,7 +321,7 @@ class ApprovalQueue:
         self._emit(event, self._read(con, item_id), **extra)
 
     def _block_in(self, con, item: QueueItem, d) -> PolicyBlocked:
-        if set(d.codes) == {"clock_skew"}:  # the clock moved: refuse for now, don't block for good
+        if set(d.codes) <= self.TRANSIENT:  # refuse for now, don't block for good
             return PolicyBlocked(item, d.violations)
         status = "expired" if "expired" in d.codes else "blocked"
         self._write(con, item.id, status=status, policy=json.dumps(d.to_dict()))
@@ -319,13 +347,19 @@ class ApprovalQueue:
             self._write(con, item.id, invoice_due=json.dumps(limit.to_paypal()) if limit else None)
         return item
 
-    def approve(self, item_id: str, *, by: str, limit=None) -> QueueItem:
+    def approve(self, item_id: str, *, by: str, limit=None, expected_hash: str | None = None) -> QueueItem:
+        """`expected_hash`: the fingerprint of the proposal the approver was shown (the board sends it);
+        if the stored proposal differs (a reset database, another tab), nothing is approved."""
         limit = KEEP if limit is None else limit
+        if not _person(by):
+            raise ValueError("an approver name with at least one visible letter is required")
         err = None
         with self._locked() as con:
             item = self._read(con, item_id)
             if item.status not in ("pending", "awaiting_second"):
                 raise NotExecutable(f"{item_id} is {item.status}; only pending items can be approved")
+            if expected_hash and expected_hash != proposal_hash(item.proposal):
+                raise NotExecutable(f"{item_id} is not the proposal you were shown; reload and check it again")
             if item.status == "awaiting_second" and self._same_person(by, item.first_by):
                 raise NotExecutable(f"{item_id} was first approved by {item.first_by}; "
                                     f"a different person must give the second approval")
@@ -345,14 +379,16 @@ class ApprovalQueue:
                 else:
                     now = _iso(self.clock())
                     h = item.approved_hash or proposal_hash(item.proposal)
+                    # the audit record carries the fingerprint and the request id it authorises
                     if item.status == "pending" and item.approvals_needed > 1:
                         self._write(con, item_id, status="awaiting_second", first_by=by, first_at=now,
                                     policy=json.dumps(d.to_dict()), approved_hash=h)
-                        self._emit_in(con, "first_approval", item_id, by=by, proposal_hash=h)
+                        self._emit_in(con, "first_approval", item_id, by=by, proposal_hash=h,
+                                      request_id=item.request_id)
                     else:
                         self._write(con, item_id, status="approved", decided_at=now, decided_by=by,
                                     policy=json.dumps(d.to_dict()), approved_hash=h)
-                        self._emit_in(con, "approved", item_id, by=by, proposal_hash=h,
+                        self._emit_in(con, "approved", item_id, by=by, proposal_hash=h, request_id=item.request_id,
                                       **({"first_by": item.first_by} if item.first_by else {}))
         if err:
             raise err
@@ -366,63 +402,101 @@ class ApprovalQueue:
                        and self._same_person(r.get("by"), item.first_by) for r in recs)
 
     @staticmethod
-    def _never_started(item: QueueItem) -> bool:
-        return item.status == "approved" and item.started_at is None
+    def _never_acted(item: QueueItem) -> bool:
+        """Approved but no run that PayPal may have acted on: never started, or every attempt failed
+        in a way that proves PayPal did nothing (started_at is cleared then)."""
+        return item.status in ("approved", "failed") and item.started_at is None
+
+    @staticmethod
+    def _legacy_stuck(item: QueueItem) -> bool:
+        """An item from an older version with no approval fingerprint: it can't run, so it may be closed."""
+        return item.status in ("approved", "executing", "failed") and not item.approved_hash
 
     def reject(self, item_id: str, *, by: str, note: str | None = None) -> QueueItem:
-        """Pending items, and approved ones that never started (nothing was sent to PayPal), can be
-        rejected; that is the way out for an approval the audit log doesn't back."""
+        """Pending items, approved ones PayPal never acted on, and stuck items from older versions can
+        be rejected. Rejecting an approval the audit log doesn't back marks it `withdrawn`: the action
+        is proposed again on the next refresh (it was never really approved)."""
+        if not _person(by):
+            raise ValueError("an approver name with at least one visible letter is required")
         with self._locked() as con:
             item = self._read(con, item_id)
-            if item.status not in ("pending", "awaiting_second") and not self._never_started(item):
+            if not (item.status in ("pending", "awaiting_second") or self._never_acted(item)
+                    or self._legacy_stuck(item)):
                 raise NotExecutable(f"{item_id} is {item.status}; only pending items, or approved ones "
-                                    f"that never ran, can be rejected")
-            self._write(con, item_id, status="rejected", decided_at=_iso(self.clock()), decided_by=by, note=note)
-            self._emit_in(con, "rejected", item_id, by=by, note=note)
+                                    f"that PayPal never acted on, can be rejected")
+            unbacked = item.status in ("approved", "failed") and (self._legacy_stuck(item) or bool(self._witnessed(item)))
+            status = "withdrawn" if unbacked else "rejected"
+            self._write(con, item_id, status=status, decided_at=_iso(self.clock()), decided_by=by, note=note)
+            self._emit_in(con, status, item_id, by=by, note=note)
         return self.get(item_id)
 
     def expire_stale(self) -> list[str]:
-        """Pending items, and approved ones that never ran, expire. A run that started never
-        expires: PayPal may have acted, so it is only ever retried with its own request id."""
+        """Pending items, and approved ones PayPal never acted on, expire. A run PayPal may have acted
+        on never expires: it is only ever retried with its own request id."""
         out = []
         for item in self.list():
-            if not (item.status in ("pending", "awaiting_second") or self._never_started(item)):
+            if not (item.status in ("pending", "awaiting_second") or self._never_acted(item)):
                 continue
             if self.clock() - item.created_at > self.policy.config.expiry:
                 with self._locked() as con:
                     cur = con.execute("update queue_items set status = 'expired' where id = ? and "
                                       "(status in ('pending', 'awaiting_second') or "
-                                      "(status = 'approved' and started_at is null))", (item.id,))
+                                      "(status in ('approved', 'failed') and started_at is null))", (item.id,))
                     if cur.rowcount != 1:
                         continue
                     self._emit_in(con, "expired", item.id)
                 out.append(item.id)
         return out
 
+    # the audit events that set an item's state; the last one is where the item really is
+    STATE_EVENTS = {"enqueued", "blocked", "first_approval", "approved", "first_approval_reset", "rejected",
+                    "withdrawn", "expired", "executing", "failed", "executed", "declined"}
+
     def _witnessed(self, item: QueueItem) -> str | None:
         """Why the approval isn't backed by the audit log, or None. The queue row can be edited by
-        anyone with the database; the hash-chained audit log must also show the approval(s) of this
-        exact proposal fingerprint, by the people the row names."""
+        anyone with the database; the hash-chained audit log must also show (1) that the item's latest
+        state is approved, or a run of it, with nothing after (no reject, expiry, block or finished
+        run), and (2) the approval(s) of this exact fingerprint and request id, by the people the row
+        names, since the item was last (re)queued."""
         if self.witness is None:
             return None
         recs = self.witness(item.id)
         if recs is None:
             return "the audit log does not verify"
+        states = [r for r in recs if r.get("event") in self.STATE_EVENTS]
+        if not states or states[-1].get("event") not in ("approved", "executing", "failed"):
+            last = states[-1].get("event") if states else "nothing"
+            return f"the audit log's latest record for it is {last}, not an approval (reject it; it will be proposed again)"
+        start = max((i for i, r in enumerate(states) if r.get("event") in ("enqueued", "first_approval_reset")), default=0)
+        since = states[start:]
+
         def by(ev: str) -> list[str]:
-            return [r.get("by") for r in recs if r.get("event") == ev and r.get("proposal_hash") == item.approved_hash]
-        final = by("approved")
-        if not any(self._same_person(b, item.decided_by) for b in final):
-            return "no approval of this exact proposal is recorded in the audit log (reject it and let it be proposed again)"
+            return [r.get("by") for r in since if r.get("event") == ev and r.get("proposal_hash") == item.approved_hash
+                    and r.get("request_id", item.request_id) == item.request_id]
+        if not any(self._same_person(b, item.decided_by) for b in by("approved")):
+            return "no approval of this exact proposal is recorded in the audit log (reject it; it will be proposed again)"
         if item.approvals_needed > 1:
             firsts = by("first_approval")
             if not any(self._same_person(f, item.first_by) and not self._same_person(f, item.decided_by) for f in firsts):
                 return "the audit log does not show two different approvers for this exact proposal"
         return None
 
-    # On a retry of a run that already started, PayPal may have acted. These checks are about whether
-    # to start; they don't apply to finishing (the retry reuses the request id; the fingerprint and
-    # the audit witness still apply).
+    # On a retry of a run PayPal may have acted on, these checks are about whether to start; they
+    # don't apply to finishing it (the retry reuses the request id; the fingerprint and the audit
+    # witness still apply). A first attempt that provably never reached PayPal doesn't count.
     RETRY_EXEMPT = {"expired", "rate_cap", "amount_cap", "clock_skew"}
+
+    @staticmethod
+    def _paypal_may_have_acted(e: Exception) -> bool:
+        """False only when the failure proves PayPal did nothing: the connection was never made, or
+        PayPal answered with a refusal (4xx other than 409, which can mean the request id was seen)."""
+        import httpx
+        from .paypal.sandbox import PayPalError
+        if isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout)):
+            return False
+        if isinstance(e, PayPalError) and 400 <= e.status < 500 and e.status != 409:
+            return False
+        return True
 
     def execute(self, item_id: str, client: PayPalClient, *, limit=None) -> QueueItem:
         limit = KEEP if limit is None else limit
@@ -443,7 +517,8 @@ class ApprovalQueue:
                                               or self._same_person(item.first_by, item.decided_by)):
                 raise NotExecutable(f"{item_id} needs two different approvers before it can run")
             if not item.approved_hash:
-                raise NotExecutable(f"{item_id} has no approval fingerprint; reject it and let it be proposed again")
+                raise NotExecutable(f"{item_id} has no approval fingerprint (approved by an older version); "
+                                    f"reject it and it will be proposed again")
             why = self._witnessed(item)
             if why:
                 raise NotExecutable(f"{item_id}: {why}")
@@ -471,9 +546,15 @@ class ApprovalQueue:
         try:
             result = self._dispatch(item, client, request_id, retry=retry)
         except Exception as e:  # recorded, then re-raised; retry uses the same request id
+            saved = self.get(item_id).result  # a create that went through is PayPal having acted
+            acted = retry or self._paypal_may_have_acted(e) or bool(isinstance(saved, dict) and saved.get("invoice_id"))
+            msg = f"{type(e).__name__}: {e}"[:500]
             with self._locked() as con:
-                self._write(con, item_id, status="failed", error=f"{type(e).__name__}: {e}"[:500])
-                self._emit_in(con, "failed", item_id, error=f"{type(e).__name__}: {e}"[:500])
+                # if PayPal provably did nothing, the next attempt is a first run again: limits,
+                # expiry and the hourly cap are checked as if it had never started
+                self._write(con, item_id, status="failed", error=msg,
+                            started_at=_iso(item.started_at) if acted else None)
+                self._emit_in(con, "failed", item_id, error=msg, paypal_may_have_acted=acted)
             raise
         declined = self._declined(item.proposal, result)
         with self._locked() as con:
@@ -510,8 +591,17 @@ class ApprovalQueue:
                     return done
             return client.execute_call(c["method"], c["path"], c["body"], request_id=rid)
         partial = item.result if isinstance(item.result, dict) else {}
-        new_id = partial.get("invoice_id") if retry else None
+        new_id = partial.get("invoice_id")  # created on an earlier attempt: send that one
         number = partial.get("invoice_number")
+        if not new_id and retry:
+            # a crash after PayPal created it but before its id was saved: find it by our memo
+            memo = ((calls[0].get("body") or {}).get("detail") or {}).get("memo")
+            found = [i for i in client.list_invoices()
+                     if memo and ((i.raw.get("detail") or {}).get("memo") == memo)] if memo else []
+            if len(found) == 1:
+                new_id, number = found[0].id, found[0].number
+                self._update(item.id, result=json.dumps({"invoice_id": new_id, "invoice_number": number,
+                                                         "stage": "created", "found_by": "memo"}))
         if not new_id:
             created = client.execute_call(calls[0]["method"], calls[0]["path"], calls[0]["body"],
                                           request_id=f"{rid}-create")

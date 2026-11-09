@@ -68,16 +68,27 @@ class LoseReply:
 
 # ---------- H1: a crash while writing the audit log ----------
 
-def test_h1_crash_between_line_and_head_still_verifies_and_heals(tmp_path):
+class Crash(Exception):
+    pass
+
+
+def test_h1_crash_between_line_and_head_still_verifies_and_heals(tmp_path, monkeypatch):
     log = AuditLog(tmp_path / "audit.jsonl")
     for i in range(3):
         log.append({"event": "x", "i": i})
-    head = (tmp_path / "audit.jsonl.head").read_text()
-    log.append({"event": "x", "i": 3})
-    (tmp_path / "audit.jsonl.head").write_text(head)  # the crash came before the head moved
-    assert verify(log.path).ok
+    real = AuditLog._write_head
+
+    def dies_before_moving_the_head(self, seq, h, *, nxt=None):
+        if nxt is None:
+            raise Crash()  # the line is written; the process dies before the head moves onto it
+        return real(self, seq, h, nxt=nxt)
+    monkeypatch.setattr(AuditLog, "_write_head", dies_before_moving_the_head)
+    with pytest.raises(Crash):
+        log.append({"event": "x", "i": 3})
+    monkeypatch.setattr(AuditLog, "_write_head", real)
+    assert verify(log.path).ok and verify(log.path).count == 4
     assert audit_main(["verify", "--path", str(log.path)]) == 0
-    log.append({"event": "x", "i": 4})
+    AuditLog(log.path).append({"event": "x", "i": 4})  # a fresh process repairs the head, then appends
     v = verify(log.path)
     assert v.ok and v.count == 5 and json.loads((tmp_path / "audit.jsonl.head").read_text())["seq"] == 5
 
@@ -86,12 +97,23 @@ def test_h1_torn_last_line_is_dropped_by_the_next_append(tmp_path):
     log = AuditLog(tmp_path / "audit.jsonl")
     for i in range(3):
         log.append({"event": "x", "i": i})
+    v = verify(log.path)
+    log._write_head(3, v.head_hash, nxt="ab" * 32)  # step 1 of an append: the record is announced
     with open(log.path, "a") as f:
-        f.write('{"event": "x", "seq": 4, "prev')  # died mid-line
+        f.write('{"event": "x", "seq": 4, "prev')  # then the process died mid-line
     assert verify(log.path).ok and len(log.records()) == 3
-    log.append({"event": "y"})
+    AuditLog(log.path).append({"event": "y"})
     v = verify(log.path)
     assert v.ok and v.count == 4 and log.records()[-1]["event"] == "y"
+
+
+def test_h1_bytes_appended_without_an_announced_record_fail(tmp_path):
+    log = AuditLog(tmp_path / "audit.jsonl")
+    for i in range(3):
+        log.append({"event": "x", "i": i})
+    with open(log.path, "a") as f:
+        f.write('{"event": "x", "seq": 4')
+    assert not verify(log.path).ok
 
 
 def test_h1_unreadable_head_fails_cleanly(tmp_path):
@@ -138,7 +160,8 @@ def test_h2_m4_an_unbacked_approval_can_be_rejected_and_proposed_again(desk, wit
     item = unwitnessed_approved(d, with_hash=with_hash)
     with pytest.raises(NotExecutable):
         d.execute(item.id)
-    assert d.reject(item.id, "owner", "approval not in the audit log")["status"] == "rejected"
+    # withdrawn: never really approved, so the action is proposed again on the next refresh
+    assert d.reject(item.id, "owner", "approval not in the audit log")["status"] == "withdrawn"
     assert d.client.calls == []
 
 

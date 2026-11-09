@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cash Desk for PayPal</title>
-<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@36.2.0/dist/ag-grid-community.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@36.2.0/dist/ag-grid-community.min.js"
+        integrity="sha384-icvtRKM0YJJgeDhXnWY8UlF1PVBFd4K8Pj61la+vG+EU+awBeoP0xGPZhCD2SQOV" crossorigin="anonymous"></script>
 <style>
   :root {
     --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f0f2f5; --text: #17202a; --muted: #5d6b7a;
@@ -186,6 +187,18 @@
   </section>
 </main>
 <script>
+// the grid comes from a CDN: if it didn't load (offline, blocked), say so instead of a blank page
+if (!window.agGrid) {
+  document.addEventListener("DOMContentLoaded", () => {
+    const b = document.createElement("div");
+    b.setAttribute("role", "alert");
+    b.style.cssText = "margin:16px;padding:12px;border:1px solid currentColor;border-radius:8px";
+    b.textContent = "The table library (AG Grid, from cdn.jsdelivr.net) did not load, so the board can't show. " +
+      "Check the internet connection or any content blocker, then reload. The API still works at /api/reconciliation.";
+    document.body.prepend(b);
+  });
+  throw new Error("AG Grid did not load");
+}
 "use strict";
 // ---------- status metadata (severity order drives the grouping) ----------
 const STATUS = {
@@ -217,7 +230,7 @@ let statusFilter = null;
 
 function rowsFrom(body) {
   const rows = body.transactions.map(t => ({
-    kind: "payment", id: t.txn_id, rowKey: `txn:${t.txn_id}:${t.event_code}`,  // ids repeat across event codes
+    kind: "payment", id: t.txn_id, rowKey: `txn:${t.txn_id}:${t.event_code}:${t.status}`,  // id + event code + status is one row
     outcome: (t.outcome === "matched" && (t.rule === "ai" || t.rule === "memo_heuristic")) ? "suggested" : t.outcome,
     date: t.date, invoice_number: t.invoice_number || "", payer: t.payer_name || (t.payer_email ? "" : "PayPal (bank)"),
     payer_email: t.payer_email || "", amount: t.amount, fee: t.fee, difference: t.difference,
@@ -226,7 +239,8 @@ function rowsFrom(body) {
   }));
   // invoices with nothing paid against them still need a row (overdue / open / draft)
   for (const i of body.invoices) {
-    if (i.transactions.length || !["overdue", "open", "draft"].includes(i.outcome)) continue;
+    // (a partly paid invoice whose payment is older than this window also still owes money)
+    if (i.transactions.length || !["overdue", "open", "draft", "partial"].includes(i.outcome)) continue;
     rows.push({ kind: "invoice", id: i.invoice_number, rowKey: `inv:${i.invoice_number}`, outcome: i.outcome, date: i.due_date || "",
       invoice_number: i.invoice_number, payer: i.customer || "", payer_email: i.recipient_email || "",
       amount: i.outstanding, fee: null, difference: null, reason: i.reason, reason_source: i.reason_source,
@@ -347,8 +361,13 @@ const gridOptions = {
 async function load() {
   setLoading(true);
   try {
-    const r = await fetch("/api/reconciliation");
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    let r;
+    try { r = await fetch("/api/reconciliation"); }
+    catch (e) { throw new Error(`Could not reach the Cash Desk server (${e.message}). Is it running? Start it with "make demo".`); }
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(typeof j.detail === "string" ? j.detail : `The server answered HTTP ${r.status}.`);
+    }
     data = await r.json();
     document.getElementById("mode").textContent = `mode: ${data.mode}`;
     document.getElementById("asof").textContent = `as of ${data.as_of}`;
@@ -360,10 +379,10 @@ async function load() {
     gridApi.setGridOption("loading", false);  // must be off before rowData (AG Grid warning #99)
     gridApi.setGridOption("rowData", groupedRows(rows));
   } catch (e) {
-    showBanner(`Could not reach the Cash Desk server (${e.message}). Is it running? Start it with "make demo".`);
+    showBanner(e.message);
     gridApi.setGridOption("loading", false);
     gridApi.setGridOption("rowData", []);
-    gridApi.setGridOption("overlayNoRowsTemplate", `<span class="state">Could not load reconciliation (${esc(e.message)}). Is the server running?</span>`);
+    gridApi.setGridOption("overlayNoRowsTemplate", `<span class="state">Could not load the reconciliation: ${esc(e.message)}</span>`);
     gridApi.showNoRowsOverlay();
   } finally { setLoading(false); }
 }
@@ -435,6 +454,7 @@ const QSTATUS = {
   failed: { label: "Failed (retry)", tone: "bad" }, rejected: { label: "Rejected", tone: "neutral" },
   blocked: { label: "Blocked by policy", tone: "bad" }, expired: { label: "Expired", tone: "neutral" },
   declined: { label: "Declined by PayPal", tone: "bad" },
+  withdrawn: { label: "Withdrawn (proposed again)", tone: "neutral" },
 };
 const ACTION = { send_reminder: "Send reminder", create_draft_invoice: "Create + send invoice",
   record_payment: "Record payment", refund_capture: "Refund duplicate", refund_overpayment: "Refund overpayment" };
@@ -473,7 +493,8 @@ const approvalCols = [
     valueGetter: p => { const a = p.data.proposal.amount; return a ? money({ value: a.value, currency: a.currency_code }) : ""; } },
   { headerName: "Why", flex: 1, minWidth: 300, wrapText: true, autoHeight: true,
     valueGetter: p => p.data.proposal.reason,
-    cellRenderer: p => `${esc(p.value)}${p.data.proposal.needs_review ? ' <span class="pill tone-warn">needs review</span>' : ""}` },
+    cellRenderer: p => `${esc(p.value)}${p.data.proposal.needs_review ? ' <span class="pill tone-warn">needs review</span>' : ""}` +
+      (p.data.error && p.data.status !== "executed" ? `<div class="sub">Last attempt: ${esc(p.data.error)}</div>` : "") },
   { headerName: "Policy", width: 220, wrapText: true, autoHeight: true,
     cellRenderer: p => p.data.policy.allowed ? '<span class="pill tone-ok">passes</span>'
       : (p.data.policy.violations || []).map(v => `<div class="sub" style="color:var(--bad)">${esc(v.message)}</div>`).join("") },
@@ -543,7 +564,8 @@ async function confirmAndRun() {
       await post(`/api/approvals/${it.id}/reject`, { by, note: document.getElementById("confirm-note").value || null });
     } else {
       let state = it.status;
-      if (act === "approve") state = (await post(`/api/approvals/${it.id}/approve`, { by })).status;
+      // the fingerprint of the proposal on screen: the server refuses if the stored one differs
+      if (act === "approve") state = (await post(`/api/approvals/${it.id}/approve`, { by, proposal_hash: it.proposal_hash })).status;
       // first of two approvals: recorded, nothing runs until a different person approves
       if (state !== "awaiting_second") await post(`/api/approvals/${it.id}/execute`);
     }

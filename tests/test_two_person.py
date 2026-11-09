@@ -153,10 +153,10 @@ def test_api_reports_the_second_approval_step(tmp_path, monkeypatch):
     api.post("/api/proposals/refresh")
     item = next(i for i in api.get("/api/approvals").json()["items"] if i["proposal"]["type"] == "refund_capture")
     assert item["approvals_needed"] == 2
-    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner"})
+    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner", "proposal_hash": item["proposal_hash"]})
     assert r.status_code == 200 and r.json()["status"] == "awaiting_second" and r.json()["first_by"] == "owner"
     assert api.post(f"/api/approvals/{item['id']}/execute").status_code == 409
-    assert api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner"}).status_code == 409
-    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "bookkeeper"})
+    assert api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner", "proposal_hash": item["proposal_hash"]}).status_code == 409
+    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "bookkeeper", "proposal_hash": item["proposal_hash"]})
     assert r.json()["status"] == "approved"
     assert api.post(f"/api/approvals/{item['id']}/execute").json()["status"] == "executed"

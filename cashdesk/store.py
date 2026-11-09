@@ -101,6 +101,13 @@ class Store:
             # upstream (P -> S changes the key) never leaves a stale row behind.
             con.execute("delete from transactions where initiated >= ? and initiated <= ?",
                         (_iso(start), _iso(end)))
+            # Stand-ins rebuilt from Invoicing (a payment Transaction Search hasn't reported yet) are
+            # re-derived on every sync: drop them all, and never let one replace or sit beside a real
+            # row of the same payment (a real row keeps its fee and its own event code).
+            con.execute("delete from transactions where json_extract(raw, '$.cashdesk_source') = 'invoicing'")
+            real = {r[0] for r in con.execute("select id from transactions")}
+            real |= {t.id for t in txns if t.raw.get("cashdesk_source") != "invoicing"}
+            txns = [t for t in txns if t.raw.get("cashdesk_source") != "invoicing" or t.id not in real]
             for t in txns:
                 con.execute(
                     """insert or replace into transactions (id, event_code, status, initiated, currency,

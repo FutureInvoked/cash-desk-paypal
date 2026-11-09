@@ -14,7 +14,7 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import date
 
-from .matcher import MatchResult
+from .matcher import SUGGESTED, MatchResult
 from .models import Invoice, Money, Transaction
 
 ACTION_TYPES = {"send_reminder", "create_draft_invoice", "record_payment", "refund_capture", "refund_overpayment"}
@@ -49,6 +49,28 @@ def _call(method: str, path: str, body: dict | None) -> dict:
     return {"method": method, "path": path, "body": body, "headers": {"PayPal-Request-Id": REQUEST_ID_PLACEHOLDER}}
 
 
+def _why(r) -> str:
+    """The deterministic reason: model-written text never reaches a proposal unlabelled."""
+    return getattr(r, "rules_reason", "") or r.reason
+
+
+def _refunded(r):
+    """How much of this payment has already been refunded, from the matcher's evidence."""
+    from decimal import Decimal
+    for k in ("refunded_amount", "refunded_excess"):
+        if r.evidence.get(k):
+            return Decimal(str(r.evidence[k]).split()[0])
+    return Decimal("0")
+
+
+def _refundable(r) -> Money | None:
+    """What may still be refunded from this row: its remaining excess, less refunds still pending."""
+    if r.difference is None or r.difference.amount <= 0:
+        return None
+    left = r.difference.amount - (r.held.amount if r.held else 0)
+    return Money(left, r.difference.currency) if left > 0 else None
+
+
 def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction], *, as_of: date) -> list[Proposal]:
     inv_by_num = {i.number: i for i in invoices}
     txn_by_key = {(t.id, t.event_code, t.status): t for t in txns}  # ids repeat across event codes
@@ -70,7 +92,7 @@ def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction
         out.append(Proposal(
             _pid("send_reminder", inv.id), "send_reminder", inv.id, inv.number, r.outstanding,
             [_call("POST", f"/v2/invoicing/invoices/{inv.id}/remind", body)],
-            f"Send a payment reminder for {inv.number}: {r.reason}",
+            f"Send a payment reminder for {inv.number}: {_why(r)}",
             {"invoice.id": inv.id, "invoice.detail.payment_term.due_date": inv.due_date.isoformat(),
              "invoice.due_amount": str(r.outstanding), "days_overdue": r.days_overdue,
              "invoice.primary_recipients[0].billing_info.email_address": inv.recipient_email},
@@ -80,9 +102,12 @@ def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction
         t = txn_by_key.get((r.txn_id, r.event_code, r.status))
         if t is None:
             continue
-        # 2. refund the duplicate capture
-        if r.outcome == "duplicate":
-            left = r.difference if r.difference is not None and r.difference.amount > 0 else t.amount  # unrefunded part
+        # refunds are only ever proposed from rows the deterministic rules placed: a suggested link
+        # (AI or memo heuristic) can lead to a record-payment proposal and nothing else
+        suggested = r.rule in SUGGESTED
+        # 2. refund the duplicate capture (what is still unrefunded, less refunds pending)
+        if r.outcome == "duplicate" and not suggested and _refundable(r):
+            left = _refundable(r)
             body = {"amount": left.to_paypal(),
                     "note_to_payer": f"Refund of a duplicate payment for invoice {r.invoice_number}. "
                                      f"Your first payment was received; thank you.",
@@ -90,12 +115,12 @@ def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction
             out.append(Proposal(
                 _pid("refund_capture", t.id), "refund_capture", t.id, r.invoice_number, left,
                 [_call("POST", f"/v2/payments/captures/{t.id}/refund", body)],
-                f"Refund the duplicate payment: {r.reason}",
+                f"Refund the duplicate payment: {_why(r)}",
                 dict(r.evidence),
             ))
         # 2b. refund only the excess of an overpayment (a partial refund of the same capture)
-        elif r.outcome == "overpaid" and r.difference is not None and r.difference.amount > 0:
-            excess = r.difference
+        elif r.outcome == "overpaid" and not suggested and _refundable(r):
+            excess = _refundable(r)
             body = {"amount": excess.to_paypal(),
                     "note_to_payer": f"Refund of {excess} overpaid on invoice {r.invoice_number}. "
                                      f"The invoice is paid in full; thank you.",
@@ -103,7 +128,7 @@ def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction
             out.append(Proposal(
                 _pid("refund_overpayment", t.id), "refund_overpayment", t.id, r.invoice_number, excess,
                 [_call("POST", f"/v2/payments/captures/{t.id}/refund", body)],
-                f"Refund the overpaid {excess} (partial refund of this payment): {r.reason}",
+                f"Refund the overpaid {excess} (partial refund of this payment): {_why(r)}",
                 {**r.evidence, "overpaid_by": str(excess)},
             ))
         # 3. draft + send an invoice for money received with no invoice
@@ -124,18 +149,24 @@ def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction
                 [_call("POST", "/v2/invoicing/invoices", create),
                  _call("POST", "/v2/invoicing/invoices/{new_invoice_id}/send",
                        {"send_to_recipient": False, "send_to_invoicer": True})],
-                f"Create an invoice for the unbilled payment so the books balance: {r.reason}",
+                f"Create an invoice for the unbilled payment so the books balance: {_why(r)}",
                 dict(r.evidence),
             ))
-        # 4. record a payment received outside Invoicing against the suggested invoice
-        elif r.outcome == "matched" and r.rule in ("ai", "memo_heuristic") and r.invoice_id:
+        # 4. record a payment received outside Invoicing against the suggested invoice: what the
+        #    payment still holds after any refund of it, never more
+        elif r.outcome in ("matched", "partial") and suggested and r.invoice_id:
+            kept = Money(t.amount.amount - _refunded(r), t.amount.currency)
+            if kept.amount <= 0:
+                continue
             body = {"method": "PAYPAL", "payment_date": t.initiated.date().isoformat(),
-                    "amount": t.amount.to_paypal(),
+                    "amount": kept.to_paypal(),
                     "note": f"PayPal transaction {t.id} (matched by Cash Desk)"}
+            note = r.evidence.get("ai.reason")
             out.append(Proposal(
                 _pid("record_payment", r.invoice_id), "record_payment", r.invoice_id, r.invoice_number,
-                t.amount, [_call("POST", f"/v2/invoicing/invoices/{r.invoice_id}/payments", body)],
-                f"Mark {r.invoice_number} as paid by this payment: {r.reason}",
+                kept, [_call("POST", f"/v2/invoicing/invoices/{r.invoice_id}/payments", body)],
+                f"Mark {r.invoice_number} as paid by this payment: {_why(r)}"
+                + (f" The AI's own note, unverified: \"{note}\"" if note else ""),
                 dict(r.evidence), needs_review=r.needs_review, source=r.resolved_by,
             ))
 

@@ -74,9 +74,9 @@ def test_approvals_show_the_exact_api_call_and_policy(api):
 def test_approve_then_execute(api, desk):
     api.post("/api/proposals/refresh")
     item = next(i for i in api.get("/api/approvals").json()["items"] if i["proposal"]["type"] == "refund_capture")
-    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner"})
+    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner", "proposal_hash": item["proposal_hash"]})
     assert r.status_code == 200 and r.json()["status"] == "awaiting_second"  # 800.00 refund: two people
-    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "bookkeeper"})
+    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "bookkeeper", "proposal_hash": item["proposal_hash"]})
     assert r.status_code == 200 and r.json()["status"] == "approved"
     r = api.post(f"/api/approvals/{item['id']}/execute")
     assert r.status_code == 200 and r.json()["status"] == "executed"
@@ -104,7 +104,7 @@ def test_expired_approval_returns_policy_violations(api, desk):
     api.post("/api/proposals/refresh")
     item = api.get("/api/approvals").json()["items"][0]
     desk._now[0] += timedelta(hours=30)
-    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner"})
+    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner", "proposal_hash": item["proposal_hash"]})
     assert r.status_code == 422
     assert "expired" in [v["code"] for v in r.json()["detail"]["violations"]]
 
@@ -122,7 +122,7 @@ def test_approve_requires_an_approver_name(api):
 def test_audit_endpoint_returns_records_and_verification(api):
     api.post("/api/proposals/refresh")
     item = api.get("/api/approvals").json()["items"][0]
-    api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner"})
+    api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner", "proposal_hash": item["proposal_hash"]})
     body = api.get("/api/audit").json()
     assert body["verify"]["ok"] is True and body["verify"]["count"] == 8
     assert body["verify"]["head_hash"] == body["records"][-1]["hash"]

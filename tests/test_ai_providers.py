@@ -321,11 +321,12 @@ def test_reasons_go_to_the_exact_row_when_ids_repeat_across_event_codes():
     txns = txns + [conv]
     p = {"resolutions": [], "reasons": [
         {"id": tid, "reason": "Plain id: ambiguous between two rows.", "cited_fields": ["transaction_info.transaction_id"]},
-        {"id": f"{tid}:T0006", "reason": "Row-specific reason for the payment.", "cited_fields": ["transaction_info.transaction_id"]}]}
+        {"id": f"{tid}:T0006", "reason": "Row-specific reason: transaction_info.transaction_id is the payment.",
+         "cited_fields": ["transaction_info.transaction_id"]}]}
     client, calls = mocked(chat_reply(json.dumps(p)))
     r = reconcile(invs, txns, as_of=AS_OF, reconciler=rec(client))
     assert f"{tid}:T0006" in calls[0].content.decode() and f"{tid}:T0200" in calls[0].content.decode()
-    assert r.txn(tid, "T0006").reason == "Row-specific reason for the payment."
+    assert r.txn(tid, "T0006").reason == "Row-specific reason: transaction_info.transaction_id is the payment."
     assert r.txn(tid, "T0200").reason_source == "rules"
 
 

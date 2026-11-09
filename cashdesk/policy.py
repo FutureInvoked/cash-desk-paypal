@@ -144,6 +144,11 @@ class Policy:
                 # the duplicate's amount still unrefunded, re-read from the latest sync
                 if invoice_due.currency != amt.currency or amt.amount > invoice_due.amount:
                     bad("amount_cap", f"{amt} exceeds what is still refundable on this duplicate ({invoice_due})")
+            if p.type in ("send_reminder", "create_draft_invoice") and invoice_due is not None:
+                # re-read from the latest sync: the invoice was paid, or the payment was matched since
+                if invoice_due.currency != amt.currency or amt.amount > invoice_due.amount:
+                    bad("amount_cap", f"after the latest sync this is no longer needed for {amt} "
+                                      f"(now {invoice_due})")
 
         # integrity
         for msg in self._integrity(p):

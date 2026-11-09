@@ -283,7 +283,7 @@ def validate(out, result, invoices, txns, payload, model: str) -> Suggestions:
             continue
         if num not in {i.number for i in candidates(result, invoices, t)}:
             continue  # the AI may only pick from the candidates it was shown
-        why = str(res.get("reason", ""))[:300]
+        why = clean_text(res.get("reason", ""))[:300]
         if foreign_data(why, payload_text):
             continue  # a link that smuggles data out is not trusted at all
         cited = res["cited_fields"]
@@ -301,10 +301,11 @@ def validate(out, result, invoices, txns, payload, model: str) -> Suggestions:
     for r in out.get("reasons", []) or []:
         if not isinstance(r, dict):
             continue
-        rid, text, cited = r.get("id"), _one_line(str(r.get("reason", ""))), r.get("cited_fields", [])
+        rid, text, cited = r.get("id"), _one_line(r.get("reason", "")), r.get("cited_fields", [])
         if rid not in evidence_keys and len(plain.get(rid, [])) == 1:
             rid = plain[rid][0]
         if (rid in evidence_keys and text and isinstance(cited, list) and cited
+                and any(c in text for c in cited)  # the sentence names a field it relies on (the prompt's rule)
                 and set(cited) <= evidence_keys[rid] and not foreign_data(text, payload_text)):
             reasons[rid] = text
     return Suggestions(links, reasons, f"ai ({model})")
@@ -497,8 +498,17 @@ def make_reconciler():
 
 # ---------------------------------------------------------------- reasons (deterministic)
 
+def clean_text(s) -> str:
+    """Model-written text made safe to store and serve: valid UTF-8 (a lone surrogate, which is valid
+    JSON, becomes '?'), no control or format characters, one line."""
+    import unicodedata
+    s = str(s or "").encode("utf-8", "replace").decode("utf-8")
+    s = "".join(ch if unicodedata.category(ch) not in ("Cc", "Cf", "Co", "Cs") else " " for ch in s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 def _one_line(s: str) -> str:
-    return re.sub(r"\s+", " ", s or "").strip()[:280]
+    return clean_text(s)[:280]
 
 
 def _first_ref(ev: dict) -> str:
@@ -509,7 +519,7 @@ def _first_ref(ev: dict) -> str:
     return "transaction_info.transaction_id"
 
 
-def txn_reason(r: TxnResult, txns: dict[tuple[str, str], Transaction]) -> str:
+def txn_reason(r: TxnResult, txns: dict[tuple[str, str], Transaction], *, ai_text: bool = True) -> str:
     t = txns.get((r.txn_id, r.event_code, r.status))
     amt = str(t.amount) if t else "?"
     ev = r.evidence
@@ -527,7 +537,8 @@ def txn_reason(r: TxnResult, txns: dict[tuple[str, str], Transaction]) -> str:
         return (f"Matched to {n}: transaction_info.transaction_amount {amt} and payer_info.email_address {email} "
                 f"equal the invoice total and recipient.")
     if r.outcome == "matched" and r.rule in ("memo_heuristic", "ai"):
-        why = ev.get("ai.reason") or (
+        why = (ev.get("ai.reason") if ai_text else None) or ("the AI linked it; its note is shown apart"
+                                                              if r.rule == "ai" else None) or (
             "transaction_info.transaction_note names the customer's business"
             if "invoice.primary_recipients[0].billing_info.business_name" in ev
             else "transaction_info.transaction_note names the invoice contact"
@@ -612,15 +623,25 @@ def reconcile(invoices: list[Invoice], txns: list[Transaction], *, as_of: date, 
     try:
         sug = reconciler.suggest(first, invoices, txns)
     except InvalidAIOutput as e:
-        sug = fallback_suggestions(first, invoices, txns, f"fallback (invalid AI output: {e})")
-    final = match(invoices, txns, as_of=as_of, links=sug.links) if sug.links else first
+        sug = fallback_suggestions(first, invoices, txns, f"fallback (invalid AI output: {clean_text(e)[:120]})")
+    except Exception as e:  # noqa: BLE001 - any provider or parsing failure: the rules still answer
+        sug = fallback_suggestions(first, invoices, txns, f"fallback (AI error: {type(e).__name__})")
+    links = dict(sug.links)
+    if sug.links and not sug.status.startswith("fallback"):
+        # where the model linked a payment, the memo heuristic's link stands behind it: if the model's
+        # link can't apply (e.g. more than the invoice owes), the payment isn't left unmatched for it
+        heur = fallback_suggestions(first, invoices, txns, "").links
+        links = {tid: [ln] + ([heur[tid]] if tid in heur else []) for tid, ln in sug.links.items()}
+    final = match(invoices, txns, as_of=as_of, links=links) if links else first
     by_id = {(t.id, t.event_code, t.status): t for t in txns}  # ids repeat across event codes
     for r in final.transactions:
+        r.rules_reason = txn_reason(r, by_id, ai_text=False)  # what proposals quote: never model text
         if row_id(r) in sug.reasons and r.outcome == first.txn(r.txn_id, r.event_code).outcome:
             r.reason, r.reason_source = sug.reasons[row_id(r)], "ai"
         else:
             r.reason, r.reason_source = txn_reason(r, by_id), "rules"
     for r in final.invoices:
+        r.rules_reason = invoice_reason(r)
         if r.invoice_number in sug.reasons and r.outcome == first.invoice_by_number(r.invoice_number).outcome:
             r.reason, r.reason_source = sug.reasons[r.invoice_number], "ai"
         else:

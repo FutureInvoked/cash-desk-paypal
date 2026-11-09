@@ -55,7 +55,7 @@ Query parameters:
 | param | required | notes |
 |---|---|---|
 | `start_date` | yes | RFC 3339 with seconds, e.g. `2026-10-08T00:00:00-0000` / `…Z` |
-| `end_date` | yes | **maximum range 31 days**, so we chunk longer windows |
+| `end_date` | yes | **maximum range 31 days**; the desk always asks for the last 31 days |
 | `fields` | no | we send `all` (default is `transaction_info` only) |
 | `page_size` | no | 1 to 500, default 100; we use 100 |
 | `page` | no | min 1, default 1 (`page=1&page_size=20` = first 20) |
@@ -215,9 +215,9 @@ Our executor fixes the ID when the action is queued (`cashdesk-<item_id>-<random
 ## 6. Sandbox gotchas (handled in code)
 
 1. **Transaction Search must be enabled** on the sandbox REST app (app settings, Features, "Transaction search"). Without it, the token lacks the reporting scope and the call returns 403 `NOT_AUTHORIZED`.
-2. **Reporting delay.** New transactions can take up to about 3 hours to appear in Transaction Search. Sandbox mode therefore also reads `invoice.payments.transactions[]` from Invoicing as a second source of payment evidence. Both sources go into one net ledger per invoice: a listed payment or refund whose id is a local row of the same kind is counted once, from the local row; a listed one not in the window counts as history; refunds that don't point back at a local payment come off the invoice they name; and a `paid_amount` or `refund_amount` beyond the listed entries is ambiguous (it may already include a local row), so it only counts beyond what local rows explain and can never create a refundable excess. The board shows `last_refreshed_datetime`.
+2. **Reporting delay.** New transactions can take up to about 3 hours to appear in Transaction Search. Sandbox mode therefore also reads `invoice.payments.transactions[]` from Invoicing as a second source of payment evidence. Both sources go into one net ledger per invoice: a listed payment or refund whose id is a local row of the same kind is counted once, from the local row; a listed one not in the window counts as history; refunds that don't point back at a local payment come off the invoice they name; and a `paid_amount` or `refund_amount` beyond the listed entries is ambiguous (it may already include a local row): a paid total counts only beyond the local payments' gross, and a refund total may overlap only refunds of payments PayPal itself holds on the invoice (listed, or, with totals only, if its paid total can include every local payment). So received is never read higher than the evidence allows, and no refundable excess is made up. Refunds PayPal still shows as pending are not booked, but are held back from anything refundable. A stand-in row rebuilt from Invoicing for a payment Transaction Search hasn't reported yet is re-derived on every sync and never replaces or sits beside a real row of the same payment. The board shows `last_refreshed_datetime`.
 3. **31-day window.** `end_date - start_date <= 31 days`; the desk always asks for exactly the last 31 days and refuses longer ranges (nothing is chunked).
-4. **Rate limits.** HTTP 429 is retried with exponential backoff, at most 3 tries, honouring `Retry-After` in seconds or as an HTTP date; a wait over 30 s, or one that can't be read, fails at once as a PayPal error instead of holding the request open.
+4. **Rate limits.** HTTP 429 is retried with exponential backoff, up to 3 retries (4 requests), honouring `Retry-After` in seconds or as an HTTP date; a wait over 30 s, or one that can't be read, fails at once as a PayPal error instead of holding the request open.
 5. **Remind returns 204** with an empty body, so don't parse JSON there.
 6. **Transaction IDs aren't unique** in reporting. The key is `(transaction_id, transaction_event_code, transaction_status)`.
 7. **Amounts are strings**, and debits/fees are negative.

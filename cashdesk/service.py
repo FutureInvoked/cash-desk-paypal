@@ -145,52 +145,56 @@ class Desk:
         r = self.result()
         # Anything already queued (live, blocked or rejected) is not proposed again; expired can be.
         # (declined = PayPal answered no, nothing moved: it may be proposed again)
-        seen = {i.proposal.intent_key for i in self.queue.list() if i.status not in ("expired", "declined")}
-        # what PayPal says each invoice still owes (before any suggested match is recorded)
-        outstanding = {i.id: i.due for i in self.store.invoices()}
+        # (declined = PayPal answered no; withdrawn = an approval the audit log didn't back: nothing
+        # moved, so both may be proposed again)
+        self.queue.expire_stale()
+        seen = {i.proposal.intent_key for i in self.queue.list()
+                if i.status not in ("expired", "declined", "withdrawn")}
         enq = skipped = 0
         for p in propose(r, self.store.invoices(), self.store.transactions(), as_of=self.as_of):
             if p.intent_key in seen:
                 skipped += 1
                 continue
-            if p.type == "record_payment":
-                due = outstanding.get(p.target)
-            elif p.type in ("refund_overpayment", "refund_capture"):
-                due = self.current_limit(p)  # what is still refundable, from reconciliation, not the proposal
-            else:
-                due = None
-            self.queue.enqueue(p, invoice_due=due)
+            # the limit is stored apart from the proposal, from reconciliation (see current_limit)
+            if self.queue.enqueue_new(p, invoice_due=self.current_limit(p)) is None:
+                skipped += 1  # another "Propose actions" added it a moment ago
+                continue
             enq += 1
         return {"enqueued": enq, "skipped": skipped}
 
     def _approval_records(self, item_id: str) -> list[dict] | None:
-        """The audit log's approval records for one queue item; None when the log doesn't verify."""
+        """The audit log's records for one queue item (its whole history, so a later reject, expiry or
+        finished run is seen); None when the log doesn't verify."""
         if not verify(self.audit.path).ok:
             return None
-        return [r for r in self.audit.records()
-                if r.get("item_id") == item_id and r.get("event") in ("approved", "first_approval")]
+        return [r for r in self.audit.records() if r.get("item_id") == item_id]  # every state, in order
 
-    def current_limit(self, p) -> Money | None:
-        """What the proposal may move now, from the latest sync, not from when it was proposed.
-        Zero when the reason for it is gone (the duplicate or overpayment was refunded elsewhere)."""
-        if p.type not in ("refund_capture", "refund_overpayment", "record_payment"):
-            return None
-        r = self.result()
+    def current_limit(self, p) -> Money:
+        """What the proposal may move now, from the latest sync, not from when it was proposed: the
+        amount the proposer would offer today for the same action (for a record-payment, also no more
+        than PayPal says the invoice still owes). Zero when the reason for it is gone: the invoice was
+        paid, the duplicate or overpayment was refunded elsewhere, the unbilled payment was matched."""
         zero = Money(Decimal("0"), p.amount.currency if p.amount else "USD")
+        r = self.result()
+        fresh = next((q for q in propose(r, self.store.invoices(), self.store.transactions(), as_of=self.as_of)
+                      if q.intent_key == p.intent_key), None)
+        if fresh is None or fresh.amount is None:
+            return zero
         if p.type == "record_payment":
-            # what PayPal says the invoice still owes (the suggested match itself isn't recorded yet)
             inv = next((i for i in self.store.invoices() if i.id == p.target), None)
-            return inv.due if inv else zero
-        want = "duplicate" if p.type == "refund_capture" else "overpaid"
-        x = next((x for x in r.transactions if x.txn_id == p.target and x.outcome == want and x.difference), None)
-        return x.difference if x else zero
+            if inv is None or inv.due.currency != fresh.amount.currency:
+                return zero
+            return min((fresh.amount, inv.due), key=lambda m: m.amount)
+        return fresh.amount
 
     def approvals(self) -> list[dict]:
+        self.queue.expire_stale()  # nothing waits past its 24 hours just because nobody clicked
         return [i.to_dict() for i in self.queue.list()]
 
-    def approve(self, item_id: str, by: str) -> dict:
+    def approve(self, item_id: str, by: str, expected_hash: str | None = None) -> dict:
         item = self.queue.get(item_id)
-        return self.queue.approve(item_id, by=by, limit=self.current_limit(item.proposal)).to_dict()
+        return self.queue.approve(item_id, by=by, limit=self.current_limit(item.proposal),
+                                  expected_hash=expected_hash).to_dict()
 
     def reject(self, item_id: str, by: str, note: str | None) -> dict:
         return self.queue.reject(item_id, by=by, note=note).to_dict()

@@ -3,3 +3,4 @@
 import os
 
 os.environ["CASHDESK_NO_DOTENV"] = "1"
+os.environ["CASHDESK_TESTING"] = "1"  # lets Starlette's TestClient host ("testserver") through

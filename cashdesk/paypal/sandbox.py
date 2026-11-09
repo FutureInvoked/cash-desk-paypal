@@ -209,7 +209,9 @@ class SandboxPayPalClient(PayPalClient):
                 pid, when = p.get("payment_id"), p.get("payment_date")
                 if p.get("type") != "PAYPAL" or not pid or pid in seen or not when:
                     continue
-                if not (start.date() <= date.fromisoformat(when[:10]) <= end.date()):
+                # payment_date has no time of day: only a day strictly inside the window is surely in it
+                # (a payment on the start date may be hours before the window, and is already stored)
+                if not (start.date() < date.fromisoformat(when[:10]) <= end.date()):
                     continue
                 given, _, surname = (inv.recipient_name or "").partition(" ")
                 extra.append(parse_transaction({

@@ -17,14 +17,15 @@ make demo          # installs into .venv, serves http://localhost:8000 with samp
 ```
 
 - Port 8000 busy? `make demo PORT=8010`.
-- Needs Python 3.11+. It uses `uv` when installed, otherwise `venv` + `pip`.
+- Needs Python 3.11+ on macOS or Linux (the audit log uses POSIX file locks). It uses `uv` when
+  installed, otherwise `venv` + `pip`.
 - The demo runs on **Northwind Studio**, a fictional design agency with 26 invoices and 26 PayPal
   transactions that cover every case a small business hits (see [fixtures/README.md](fixtures/README.md)).
 
 Other commands:
 
 ```bash
-make test          # 310+ tests: matcher, AI layer (mocked), policy, queue, audit, API, UI contract
+make test          # ~490 tests: matcher, AI layer (mocked), policy, queue, audit, API, UI contract
 make audit-verify  # verifies the hash chain of var/audit.jsonl
 make eval          # scores reconciliation against the expected outcomes in evals/match_eval.json
 ```
@@ -122,10 +123,17 @@ The AI layer is in `cashdesk/ai.py`, with the prompt in `cashdesk/prompts/reconc
 - **Guard rails:**
   - The model only suggests.
   - A link is kept only if the invoice was one of the candidates, the currency matches and the
-    confidence is at least 0.6. It then goes back through the deterministic matcher.
-  - Suggested matches are marked "needs review".
-  - A reason is kept only if every field it cites exists in the evidence of that exact row, and it
-    is dropped if it carries data the model was never shown (a key block or a long unknown token).
+    confidence is at least 0.6. It then goes back through the deterministic matcher, and applies
+    only if the payment fits in what the invoice still owes: a link can never create an
+    overpayment or a duplicate. If the model's link doesn't fit, the memo heuristic's stands.
+  - Every suggested match is marked "needs review", whatever confidence the model gives itself.
+  - A suggested match can only lead to a record-payment proposal; refunds are proposed only from
+    rows the deterministic rules placed, and proposals quote the rules' own reasons. The model's
+    text is shown on the board labelled as the AI's, and on a record-payment as its unverified note.
+  - A reason is kept only if it names a field it cites, every field it cites exists in the
+    evidence of that exact row, and it carries no data the model was never shown (a key block or a
+    long unknown token). Model text is cleaned to one line of valid UTF-8 before it is stored.
+  - Any provider error or malformed answer falls back to the rules.
   - Text written by payers (notes, subjects) is passed to the model as untrusted data.
   - The AI layer has no path to any PayPal write.
 - **No key? It still works.** With no AI provider set, or on an API error, a refusal or
@@ -142,10 +150,10 @@ The AI layer is in `cashdesk/ai.py`, with the prompt in `cashdesk/prompts/reconc
 | Policy | Checks the allowlist (five actions only), positive amounts in USD or EUR, per-action caps (refunds ≤ 1,000; record payment ≤ amount still owed; an overpayment refund ≤ the amount overpaid, a duplicate refund ≤ what is still unrefunded; these limits are re-read from the latest sync at approval and again right before running, so a refund made elsewhere in the meantime shrinks or blocks it), call integrity (method, path, body amounts must equal the proposal; no host or path tricks), a rate cap (10 per hour, counting a run from when it starts, so calls still in flight count), one live action per target, no reuse of a `PayPal-Request-Id`, and 24-hour expiry | `cashdesk/policy.py` |
 | Approval queue | A human approves or rejects each action. The policy runs again at approval and again right before the PayPal call, against the proposal as stored. Rejected, expired, blocked or unapproved items never execute (tested). | `cashdesk/queue.py` |
 | Two-person rule | Refunds above 500.00 need two different approvers. The first approval is only recorded; the second must come from someone else, and the executor refuses to run a large refund that lacks two distinct approvers even if the database is edited. The threshold is set in `PolicyConfig` (`None` turns it off). The board has no logins yet, so approver names are typed in; in production they would come from user accounts. | `cashdesk/policy.py`, `cashdesk/queue.py` |
-| What runs is what you approved | The executor sends each proposal's stored calls exactly as the dialog showed them (method, path, JSON body). A fingerprint of the proposal is taken at approval; if anything changes before it runs (or between the two approvals), it is blocked. Before running, the hash-chained audit log must also show the approval(s) of that exact fingerprint by the people the queue names, so editing the queue database alone can't approve anything. Approve, reject and run each read, check and write in one database transaction, so a reject can't be overwritten by an approval in flight and two simultaneous runs can't both start. | `cashdesk/queue.py` |
-| Local board only | The board answers only on localhost (a foreign Host header, as in DNS rebinding, gets 400) and refuses writes from another site's Origin (403). `CASHDESK_ALLOWED_HOSTS` adds hosts. | `cashdesk/app.py` |
-| Idempotency | Every call carries `PayPal-Request-Id: cashdesk-<item>-<random>`, fixed when the action is queued and shown in the dialog, so a reinstall or a second desk never reuses one. A run that has started is only retried with its own id (it never expires and isn't re-checked against limits), so a lost reply or a crash never refunds twice; an executed item returns its stored result. Invoicing calls, which PayPal doesn't deduplicate, read the invoice first on a retry. | `cashdesk/queue.py` |
-| Audit | Append-only JSONL. Each record holds the sha256 of its canonical JSON and the previous hash, and a head pointer catches truncation. Each record is written before the queue change it describes commits (if the write fails, the change is rolled back); a crash mid-write (a cut-off last line, or a head one record behind) is not tampering and is repaired by the next write. `make audit-verify` reports the first bad record. Secret-looking fields are redacted. | `cashdesk/audit.py` |
+| What runs is what you approved | The executor sends each proposal's stored calls exactly as the dialog showed them (method, path, JSON body). The approve request carries the fingerprint of the proposal on screen, and nothing is approved if the stored one differs. The fingerprint is checked again before it runs and between the two approvals. Before running, the hash-chained audit log must also show that the item's latest state is that approval (no later reject, expiry or finished run) and the approval(s) of that exact fingerprint and request id by the people the queue names, so editing the queue database alone can't approve or replay anything. Limits are re-read from the latest sync for every action (an invoice paid meanwhile drops its reminder). A full hour or a clock that moved refuses a step without blocking the item, and nothing waits past 24 hours. Approve, reject and run each read, check and write in one database transaction, so a reject can't be overwritten by an approval in flight and two simultaneous runs can't both start. | `cashdesk/queue.py` |
+| Local board only | The board answers only on localhost (a foreign Host header, as in DNS rebinding, gets 400) and takes writes only as JSON from its own exact origin: another local port or scheme is another site (403). It can't be framed, and it serves no API docs. `CASHDESK_ALLOWED_HOSTS` adds hosts. | `cashdesk/app.py` |
+| Idempotency | Every call carries `PayPal-Request-Id: cashdesk-<item>-<random>`, fixed when the action is queued and shown in the dialog, so a reinstall or a second desk never reuses one. A run PayPal may have acted on (a lost reply, a 5xx, a crash) is only retried with its own id: it never expires and isn't re-checked against limits, so it never refunds twice. A run PayPal provably refused (a 4xx, or no connection) counts as never started: it is checked again from scratch, and can be rejected. An executed item returns its stored result. On a retry, a record-payment first reads the invoice, and a draft invoice reuses the one already created (its id is saved at once, or found by its memo); a reminder may be sent twice if the reply to the first was lost, since PayPal has nothing to check it against. | `cashdesk/queue.py` |
+| Audit | Append-only JSONL. Each record holds the sha256 of its canonical JSON and the previous hash, and a head pointer catches truncation. Each record is written inside the database transaction of the queue change it describes, before it commits (if the write fails, the change is rolled back). The head names the one record being written, so a crash mid-write (a cut-off last line, or the head one record behind) verifies and is repaired by the next write, while a record added by hand does not. `make audit-verify` reports the first bad record. Secret-looking fields are redacted. | `cashdesk/audit.py` |
 | Sandbox only | The client refuses any base URL other than `api-m.sandbox.paypal.com` | `cashdesk/config.py` |
 
 ## Accounting export
@@ -175,13 +183,16 @@ can't run it as a formula.
 
 Polling is the default. With webhooks, PayPal tells the desk when something changes, and the desk
 re-syncs within seconds instead of on the next poll. Send Money payments still appear only through
-Transaction Search, which runs about 2 hours behind, so webhooks don't remove that lag.
+Transaction Search, which can run up to about 3 hours behind, so webhooks don't remove that lag.
 
 - **A separate server** (`make webhooks`, port 8001) serves only `POST /webhooks/paypal` and
   `GET /webhooks/health`. Point a tunnel or reverse proxy at this port, never at the board.
 - **Every event is verified with PayPal** (`POST /v1/notifications/verify-webhook-signature`, with
   the raw body passed through unchanged). Unverified events are rejected and audited; after 20 in
-  10 minutes the server answers 429 without asking PayPal. Bodies are capped at 256 KB while they
+  10 minutes from one sender (and 300 from all senders together) the server answers 429 without
+  asking PayPal. The sender is the connecting address; behind a Cloudflare tunnel set
+  `CASHDESK_TRUST_CF_CONNECTING_IP=1` so Cloudflare's `CF-Connecting-IP` names it (only trusted
+  from this machine, where cloudflared runs). Bodies are capped at 256 KB while they
   stream in, and the PayPal calls run off the event loop. Without `PAYPAL_WEBHOOK_ID` in `.env`,
   nothing is accepted.
 - **An event only triggers a re-sync.** Amounts and matches always come from PayPal's APIs, never
@@ -270,7 +281,7 @@ tests/               pytest suite
 
 More screenshots: [approvals](docs/screenshots/b3-approvals-grid.jpg) ·
 [audit + summary](docs/screenshots/b4-audit-and-summary.jpg) ·
-[light mode](docs/screenshots/b5-light-1280-server-down.jpg)
+[light mode](docs/screenshots/b5-light-1280.jpg)
 
 ![Audit log and summary](docs/screenshots/b4-audit-and-summary.jpg)
 
