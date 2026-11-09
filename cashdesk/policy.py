@@ -140,6 +140,11 @@ class Policy:
                 elif invoice_due.currency != amt.currency or amt.amount > invoice_due.amount:
                     bad("amount_cap", f"{amt} exceeds what the customer overpaid ({invoice_due})")
 
+            if p.type == "refund_capture" and invoice_due is not None:
+                # the duplicate's amount still unrefunded, re-read from the latest sync
+                if invoice_due.currency != amt.currency or amt.amount > invoice_due.amount:
+                    bad("amount_cap", f"{amt} exceeds what is still refundable on this duplicate ({invoice_due})")
+
         # integrity
         for msg in self._integrity(p):
             bad("integrity", msg)

@@ -42,7 +42,8 @@ class Desk:
         var = self.settings.var_dir
         self.store = Store(var / "cashdesk.db")
         self.audit = AuditLog(var / "audit.jsonl")
-        self.queue = ApprovalQueue(var / "cashdesk.db", policy=policy, clock=self.clock, on_event=self.audit.append)
+        self.queue = ApprovalQueue(var / "cashdesk.db", policy=policy, clock=self.clock, on_event=self.audit.append,
+                                   witness=self._approval_records)
         self._result: MatchResult | None = None
         self._result_run: int | None = None
 
@@ -137,7 +138,6 @@ class Desk:
         seen = {i.proposal.intent_key for i in self.queue.list() if i.status != "expired"}
         # what PayPal says each invoice still owes (before any suggested match is recorded)
         outstanding = {i.id: i.due for i in self.store.invoices()}
-        excess = {x.txn_id: x.difference for x in r.transactions if x.outcome == "overpaid" and x.difference}
         enq = skipped = 0
         for p in propose(r, self.store.invoices(), self.store.transactions(), as_of=self.as_of):
             if p.intent_key in seen:
@@ -145,25 +145,49 @@ class Desk:
                 continue
             if p.type == "record_payment":
                 due = outstanding.get(p.target)
-            elif p.type == "refund_overpayment":
-                due = excess.get(p.target)  # the overpaid amount, from reconciliation, not the proposal
+            elif p.type in ("refund_overpayment", "refund_capture"):
+                due = self.current_limit(p)  # what is still refundable, from reconciliation, not the proposal
             else:
                 due = None
             self.queue.enqueue(p, invoice_due=due)
             enq += 1
         return {"enqueued": enq, "skipped": skipped}
 
+    def _approval_records(self, item_id: str) -> list[dict] | None:
+        """The audit log's approval records for one queue item; None when the log doesn't verify."""
+        if not verify(self.audit.path).ok:
+            return None
+        return [r for r in self.audit.records()
+                if r.get("item_id") == item_id and r.get("event") in ("approved", "first_approval")]
+
+    def current_limit(self, p) -> Money | None:
+        """What the proposal may move now, from the latest sync, not from when it was proposed.
+        Zero when the reason for it is gone (the duplicate or overpayment was refunded elsewhere)."""
+        if p.type not in ("refund_capture", "refund_overpayment", "record_payment"):
+            return None
+        r = self.result()
+        zero = Money(Decimal("0"), p.amount.currency if p.amount else "USD")
+        if p.type == "record_payment":
+            # what PayPal says the invoice still owes (the suggested match itself isn't recorded yet)
+            inv = next((i for i in self.store.invoices() if i.id == p.target), None)
+            return inv.due if inv else zero
+        want = "duplicate" if p.type == "refund_capture" else "overpaid"
+        x = next((x for x in r.transactions if x.txn_id == p.target and x.outcome == want and x.difference), None)
+        return x.difference if x else zero
+
     def approvals(self) -> list[dict]:
         return [i.to_dict() for i in self.queue.list()]
 
     def approve(self, item_id: str, by: str) -> dict:
-        return self.queue.approve(item_id, by=by).to_dict()
+        item = self.queue.get(item_id)
+        return self.queue.approve(item_id, by=by, limit=self.current_limit(item.proposal)).to_dict()
 
     def reject(self, item_id: str, by: str, note: str | None) -> dict:
         return self.queue.reject(item_id, by=by, note=note).to_dict()
 
     def execute(self, item_id: str) -> dict:
-        item = self.queue.execute(item_id, self.client)
+        item = self.queue.get(item_id)
+        item = self.queue.execute(item_id, self.client, limit=self.current_limit(item.proposal))
         self._result = None  # PayPal state changed; re-reconcile on next read (after a sync)
         return item.to_dict()
 

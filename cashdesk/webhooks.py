@@ -21,7 +21,7 @@ import threading
 import time
 from collections import deque
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 EVENT_TYPES = (
     "PAYMENT.CAPTURE.COMPLETED",
@@ -38,6 +38,7 @@ MAX_ID = 128          # event id and transmission id (PayPal's are ~40 character
 MAX_TYPE = 100        # event type names are ~40 characters
 REJECT_LIMIT = 20     # unverified events allowed per window before answering 429 without calling PayPal
 REJECT_WINDOW = 600.0
+CLAIM_LEASE = 120  # seconds a processing claim is held before another delivery may take it over
 
 SCHEMA = """
 create table if not exists webhook_events (
@@ -68,13 +69,23 @@ class WebhookInbox:
     def _con(self):
         return closing(sqlite3.connect(self.path, timeout=30))
 
-    def claim(self, ev: dict) -> bool:
-        """Atomically take an event id; False if another delivery already has it."""
+    def claim(self, ev: dict) -> str:
+        """Atomically take an event id. Returns "new" (go on), "done" (already handled) or "busy"
+        (another delivery is working on it). A claim left in processing longer than CLAIM_LEASE
+        seconds (its worker died before finishing) is taken over, so the event isn't lost."""
+        now = datetime.now(timezone.utc)
         with self._con() as con, con:
             cur = con.execute("insert or ignore into webhook_events values (?,?,?,?,?)",
-                              (ev["id"], ev["event_type"], _resource_id(ev),
-                               datetime.now(timezone.utc).isoformat(), "processing"))
-            return cur.rowcount == 1
+                              (ev["id"], ev["event_type"], _resource_id(ev), now.isoformat(), "processing"))
+            if cur.rowcount == 1:
+                return "new"
+            cur = con.execute("update webhook_events set received_at = ? where event_id = ? "
+                              "and action = 'processing' and received_at < ?",
+                              (now.isoformat(), ev["id"], (now - timedelta(seconds=CLAIM_LEASE)).isoformat()))
+            if cur.rowcount == 1:
+                return "new"
+            row = con.execute("select action from webhook_events where event_id = ?", (ev["id"],)).fetchone()
+            return "busy" if row and row[0] == "processing" else "done"
 
     def finish(self, event_id: str, action: str) -> None:
         with self._con() as con, con:
@@ -153,8 +164,11 @@ def handle(desk, raw: bytes, headers, limiter: RejectLimiter | None = None, sour
         return 400, {"status": "rejected", "error": "signature not verified by PayPal"}
 
     inbox = WebhookInbox(desk.settings.var_dir / "cashdesk.db")
-    if not inbox.claim(ev):  # atomic: of two simultaneous deliveries, exactly one goes on
+    claim = inbox.claim(ev)  # atomic: of two simultaneous deliveries, exactly one goes on
+    if claim == "done":
         return 200, {"status": "duplicate", "event_id": ev["id"]}
+    if claim == "busy":  # not acknowledged: if that worker dies, PayPal's retry gets through
+        return 409, {"status": "retry", "error": "this event is being processed; retry later", "event_id": ev["id"]}
     if ev["event_type"] not in EVENT_TYPES:
         inbox.finish(ev["id"], "ignored")
         desk.audit.append({"event": "webhook_received", **base, "verification": status, "action": "ignored"})

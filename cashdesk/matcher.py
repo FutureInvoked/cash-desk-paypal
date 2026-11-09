@@ -172,6 +172,32 @@ def _find_by_reference(t: Transaction, invoices: list[Invoice]) -> tuple[Invoice
     return None, {}
 
 
+def _earlier(inv: Invoice, local_ids: set[str]) -> Decimal:
+    """What PayPal says was paid on the invoice that this transaction set doesn't show (a payment
+    older than the search window, or one recorded outside PayPal), net of refunds likewise unseen.
+    An entry is seen when its payment/refund id is a local transaction id or its note names one."""
+    def seen(entry: dict, id_key: str) -> bool:
+        if entry.get(id_key) in local_ids:
+            return True
+        note = entry.get("note") or ""
+        return any(re.search(rf"(?<![A-Za-z0-9]){re.escape(i)}(?![A-Za-z0-9])", note) for i in local_ids if i in note)
+
+    def unseen(block: dict | None, total_key: str, id_key: str) -> Decimal:
+        block = block if isinstance(block, dict) else {}
+        listed = [e for e in (block.get("transactions") or []) if isinstance(e, dict)]
+        amt = lambda m: Decimal(str((m or {}).get("value") or "0")) if (m or {}).get("currency_code") in (None, inv.total.currency) else Decimal("0")
+        total = amt(block.get(total_key))
+        listed_sum = sum((amt(e.get("amount")) for e in listed), Decimal("0"))
+        # an amount PayPal reports without listing it, plus listed entries we don't have locally
+        return max(total - listed_sum, Decimal("0")) + sum((amt(e.get("amount")) for e in listed if not seen(e, id_key)),
+                                                           Decimal("0"))
+    try:
+        return max(unseen(inv.raw.get("payments"), "paid_amount", "payment_id")
+                   - unseen(inv.raw.get("refunds"), "refund_amount", "refund_id"), Decimal("0"))
+    except ArithmeticError:
+        return Decimal("0")
+
+
 def _same_email(a: str | None, b: str | None) -> bool:
     return bool(a and b and a.strip().lower() == b.strip().lower())
 
@@ -188,6 +214,8 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
     pending_for: dict[str, list[str]] = {}
     refunded_for: dict[str, list[str]] = {}
     by_id = {i.id: i for i in invoices}
+    local_ids = {t.id for t in transactions}
+    earlier = {i.id: _earlier(i, local_ids) for i in invoices}  # paid before this window, per PayPal
 
     def res(t: Transaction, outcome: str, **kw) -> TxnResult:
         r = TxnResult(t.id, t.event_code, outcome, **kw)
@@ -238,7 +266,7 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
 
     # ---- pass 2: rules 2 and 3 against open invoices not yet covered ----
     def covered(inv: Invoice) -> bool:
-        got = sum((x.amount.amount for x, _ in applied.get(inv.id, [])), Decimal("0"))
+        got = earlier[inv.id] + sum((x.amount.amount for x, _ in applied.get(inv.id, [])), Decimal("0"))
         return got >= inv.total.amount
 
     def open_for_rules(inv: Invoice) -> bool:
@@ -259,8 +287,8 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
                 continue
         same_payer = [i for i in invoices if open_for_rules(i) and _same_email(t.payer_email, i.recipient_email)
                       and i.total.currency == t.amount.currency]
-        exact = [i for i in same_payer if (i.total - Money(sum((x.amount.amount for x, _ in applied.get(i.id, [])),
-                                                             Decimal("0")), i.total.currency)) == t.amount]
+        exact = [i for i in same_payer if (i.total - Money(earlier[i.id] + sum((x.amount.amount for x, _ in applied.get(i.id, [])),
+                                                                              Decimal("0")), i.total.currency)) == t.amount]
         if len(exact) == 1:
             inv = exact[0]
             r = res(t, "matched", rule="amount_email", invoice_id=inv.id, invoice_number=inv.number,
@@ -309,7 +337,7 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
         pays.sort(key=lambda p: (p[0].initiated, p[0].id))
         inv = by_id[inv_id]
         total, ccy = inv.total.amount, inv.total.currency
-        running = Decimal("0")
+        running = earlier[inv_id]
         for t, r in pays:
             back = min(refunded_amt.get(t.id, Decimal("0")), t.amount.amount)
             if back:
@@ -359,13 +387,15 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
                     else "partial"
             else:
                 r.outcome = "overpaid"
+                # this payment's own excess: an earlier overpayment's excess is not refundable from it
+                r.difference = Money(min(running - total, t.amount.amount - back), ccy)
 
     # ---- invoices ----
     inv_results: list[InvoiceResult] = []
     for inv in sorted(invoices, key=lambda i: i.number):
         pays = [(t, r) for t, r in applied.get(inv.id, []) if r.outcome not in ("duplicate", "refunded")]
-        received = Money(sum((t.amount.amount - net_less.get(t.id, Decimal("0")) for t, _ in pays),
-                             Decimal("0")), inv.total.currency)
+        received = Money(earlier[inv.id] + sum((t.amount.amount - net_less.get(t.id, Decimal("0")) for t, _ in pays),
+                                               Decimal("0")), inv.total.currency)
         outstanding = Money(max(inv.total.amount - received.amount, Decimal("0")), inv.total.currency)
         days = (as_of - inv.due_date).days if inv.due_date else 0
         if inv.status == "DRAFT":
@@ -383,10 +413,14 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
             outcome = "paid"
         elif pays:
             outcome = "partial"
+        elif earlier[inv.id] >= inv.total.amount and inv.status not in OPEN_STATUSES | {"DRAFT"}:
+            outcome = "paid"  # paid per PayPal, payment outside this search window
         elif pending_for.get(inv.id):
             outcome = "pending"
         elif inv.status in PAID_STATUSES:
             outcome = "paid"  # paid per PayPal, payment outside this search window
+        elif earlier[inv.id] > 0 and inv.status in OPEN_STATUSES:
+            outcome = "partial"  # part paid per PayPal; the rest is still due
         elif inv.due_date and days > 0:
             outcome = "overdue"
         else:

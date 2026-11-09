@@ -217,7 +217,7 @@ let statusFilter = null;
 
 function rowsFrom(body) {
   const rows = body.transactions.map(t => ({
-    kind: "payment", id: t.txn_id,
+    kind: "payment", id: t.txn_id, rowKey: `txn:${t.txn_id}:${t.event_code}`,  // ids repeat across event codes
     outcome: (t.outcome === "matched" && (t.rule === "ai" || t.rule === "memo_heuristic")) ? "suggested" : t.outcome,
     date: t.date, invoice_number: t.invoice_number || "", payer: t.payer_name || (t.payer_email ? "" : "PayPal (bank)"),
     payer_email: t.payer_email || "", amount: t.amount, fee: t.fee, difference: t.difference,
@@ -227,7 +227,7 @@ function rowsFrom(body) {
   // invoices with nothing paid against them still need a row (overdue / open / draft)
   for (const i of body.invoices) {
     if (i.transactions.length || !["overdue", "open", "draft"].includes(i.outcome)) continue;
-    rows.push({ kind: "invoice", id: i.invoice_number, outcome: i.outcome, date: i.due_date || "",
+    rows.push({ kind: "invoice", id: i.invoice_number, rowKey: `inv:${i.invoice_number}`, outcome: i.outcome, date: i.due_date || "",
       invoice_number: i.invoice_number, payer: i.customer || "", payer_email: i.recipient_email || "",
       amount: i.outstanding, fee: null, difference: null, reason: i.reason, reason_source: i.reason_source,
       rule: null, confidence: null, evidence: { "invoice.detail.invoice_number": i.invoice_number,
@@ -316,7 +316,7 @@ const gridOptions = {
   columnDefs,
   defaultColDef: { sortable: true, resizable: true, filter: true, suppressHeaderMenuButton: true },
   rowData: [],
-  getRowId: p => p.data.id,
+  getRowId: p => p.data.rowKey || p.data.id,
   isFullWidthRow: p => p.rowNode.data && p.rowNode.data.kind === "group",
   fullWidthCellRenderer: GroupRenderer,
   getRowHeight: p => p.data && p.data.kind === "group" ? 40 : undefined,

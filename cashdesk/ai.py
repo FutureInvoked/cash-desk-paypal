@@ -86,8 +86,8 @@ def candidates(result: MatchResult, invoices: list[Invoice], t: Transaction) -> 
 
 
 def _unmatched(result: MatchResult, txns: list[Transaction]) -> list[Transaction]:
-    ids = {r.txn_id for r in result.transactions if r.outcome == "unmatched"}
-    return [t for t in txns if t.id in ids]
+    keys = {(r.txn_id, r.event_code) for r in result.transactions if r.outcome == "unmatched"}
+    return [t for t in txns if (t.id, t.event_code) in keys]
 
 
 def _inv_brief(i: Invoice, r: InvoiceResult | None) -> dict:
@@ -236,10 +236,35 @@ def fallback_suggestions(result, invoices, txns, status: str) -> Suggestions:
     return Suggestions(s.links, {}, status)
 
 
+class InvalidAIOutput(ValueError):
+    """The model's answer doesn't have the schema's shape; reconciliation falls back to the rules."""
+
+
+def _check_shape(out) -> None:
+    def strs(v) -> bool:
+        return isinstance(v, list) and all(isinstance(x, str) for x in v)
+    if not isinstance(out, dict):
+        raise InvalidAIOutput("not an object")
+    res, why = out.get("resolutions", []), out.get("reasons", [])
+    if not isinstance(res, list) or not isinstance(why, list):
+        raise InvalidAIOutput("resolutions and reasons must be lists")
+    for r in res:
+        if not (isinstance(r, dict) and isinstance(r.get("transaction_id"), str)
+                and isinstance(r.get("invoice_number"), (str, type(None))) and isinstance(r.get("reason"), str)
+                and isinstance(r.get("confidence"), (int, float)) and not isinstance(r.get("confidence"), bool)
+                and strs(r.get("cited_fields"))):
+            raise InvalidAIOutput("a resolution doesn't match the schema")
+    for r in why:
+        if not (isinstance(r, dict) and isinstance(r.get("id"), str) and isinstance(r.get("reason"), str)
+                and strs(r.get("cited_fields"))):
+            raise InvalidAIOutput("a reason doesn't match the schema")
+
+
 def validate(out, result, invoices, txns, payload, model: str) -> Suggestions:
     """Keep only what the evidence backs: candidate invoices, same currency (via candidates),
     confidence >= MIN_CONFIDENCE, reasons whose cited fields exist on that exact row, and no text
     carrying data the model wasn't shown."""
+    _check_shape(out)
     payload_text = json.dumps(payload, default=str)
     by_txn = {t.id: t for t in _unmatched(result, txns)}
     links: dict[str, Link] = {}
@@ -261,10 +286,11 @@ def validate(out, result, invoices, txns, payload, model: str) -> Suggestions:
         why = str(res.get("reason", ""))[:300]
         if foreign_data(why, payload_text):
             continue  # a link that smuggles data out is not trusted at all
-        ev = {"ai.reason": why}
-        ev.update({f: payload_value(payload, t.id, f) for f in res.get("cited_fields", []) or []
-                   if isinstance(f, str) and payload_value(payload, t.id, f) is not None})
-        links[t.id] = Link(num, "ai", "ai", conf, ev)
+        cited = res["cited_fields"]
+        values = {f: payload_value(payload, t.id, f, invoice_number=num) for f in cited}
+        if not cited or any(v is None for v in values.values()):
+            continue  # a link must rest on fields the model was actually shown
+        links[t.id] = Link(num, "ai", "ai", conf, {"ai.reason": why, **values})
     evidence_keys = {r["id"]: set(r["evidence"]) for r in payload["results"]}
     # a plain transaction id is accepted only when exactly one row has it
     plain: dict[str, list[str]] = {}
@@ -284,10 +310,26 @@ def validate(out, result, invoices, txns, payload, model: str) -> Suggestions:
     return Suggestions(links, reasons, f"ai ({model})")
 
 
-def payload_value(payload: dict, txn_id: str, field: str):
+# invoice field paths the model may cite for the candidate it picked -> key in the candidate brief
+INVOICE_FIELDS = {"invoice.amount": "amount", "invoice.detail.invoice_number": "invoice_number",
+                  "invoice.due_amount": "still_due", "invoice.detail.payment_term.due_date": "due_date",
+                  "invoice.items": "items",
+                  "invoice.primary_recipients[0].billing_info.email_address": "recipient_email",
+                  "invoice.primary_recipients[0].billing_info.name": "recipient_name",
+                  "invoice.primary_recipients[0].billing_info.business_name": "recipient_business"}
+
+
+def payload_value(payload: dict, txn_id: str, field: str, invoice_number: str | None = None):
+    """The value the model was shown for `field`: on the payment, or on the candidate invoice it picked."""
     for u in payload["unmatched_payments"]:
-        if u["transaction_id"] == txn_id:
-            return u["evidence"].get(field)
+        if u["transaction_id"] != txn_id:
+            continue
+        if u["evidence"].get(field) is not None:
+            return u["evidence"][field]
+        brief = next((c for c in u["candidate_invoices"] if c["invoice_number"] == invoice_number), None)
+        key = INVOICE_FIELDS.get(field, field.removeprefix("candidate_invoices[]."))
+        if brief and key in brief and brief[key] not in (None, "", []):
+            return brief[key]
     return None
 
 
@@ -467,8 +509,8 @@ def _first_ref(ev: dict) -> str:
     return "transaction_info.transaction_id"
 
 
-def txn_reason(r: TxnResult, txns: dict[str, Transaction]) -> str:
-    t = txns.get(r.txn_id)
+def txn_reason(r: TxnResult, txns: dict[tuple[str, str], Transaction]) -> str:
+    t = txns.get((r.txn_id, r.event_code))
     amt = str(t.amount) if t else "?"
     ev = r.evidence
     email = ev.get("payer_info.email_address", "unknown payer")
@@ -506,7 +548,7 @@ def txn_reason(r: TxnResult, txns: dict[str, Transaction]) -> str:
     if r.outcome == "overpaid":
         return f"Overpaid {n} by {r.difference}: {_first_ref(ev)}; offer a refund or credit."
     if r.outcome == "duplicate":
-        orig = txns.get(r.duplicate_of)
+        orig = next((x for (i, _c), x in txns.items() if i == r.duplicate_of and x.amount.amount > 0), None)
         mins = int((t.initiated - orig.initiated).total_seconds() // 60) if t and orig else 0
         return (f"Duplicate of {r.duplicate_of} for {n}: same payer_info.email_address, same amount {amt}, "
                 f"{mins} min apart, invoice already covered; refund candidate.")
@@ -567,9 +609,12 @@ def invoice_reason(r: InvoiceResult) -> str:
 def reconcile(invoices: list[Invoice], txns: list[Transaction], *, as_of: date, reconciler=None) -> MatchResult:
     reconciler = reconciler or make_reconciler()
     first = match(invoices, txns, as_of=as_of)
-    sug = reconciler.suggest(first, invoices, txns)
+    try:
+        sug = reconciler.suggest(first, invoices, txns)
+    except InvalidAIOutput as e:
+        sug = fallback_suggestions(first, invoices, txns, f"fallback (invalid AI output: {e})")
     final = match(invoices, txns, as_of=as_of, links=sug.links) if sug.links else first
-    by_id = {t.id: t for t in txns}
+    by_id = {(t.id, t.event_code): t for t in txns}  # ids repeat across event codes
     for r in final.transactions:
         if row_id(r) in sug.reasons and r.outcome == first.txn(r.txn_id, r.event_code).outcome:
             r.reason, r.reason_source = sug.reasons[row_id(r)], "ai"

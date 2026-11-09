@@ -267,7 +267,10 @@ def test_simultaneous_deliveries_of_one_event_sync_once(make):
     ts = [threading.Thread(target=lambda: out.append(handle(desk, event().encode(), HEADERS))) for _ in range(2)]
     [t.start() for t in ts]
     [t.join() for t in ts]
-    assert sorted(b["status"] for _, b in out) == ["duplicate", "synced"]
+    # the one that lost the race isn't acknowledged while the other is still working: PayPal retries it,
+    # and the retry is then a duplicate
+    assert sorted((c, b["status"]) for c, b in out) in ([(200, "duplicate"), (200, "synced")],
+                                                       [(200, "synced"), (409, "retry")])
     assert len(desk.store.sync_runs()) == runs + 1
 
 

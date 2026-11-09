@@ -120,7 +120,7 @@ AG Grid board.
   (`cashdesk-<item>`; a retry never double-refunds), plus a sha256 hash-chained audit log.
 - **Frontend:** a single HTML page with AG Grid Community 36.2.0 from a CDN. There is no build step,
   and light and dark themes are supported.
-- **Process:** built test-first. About 310 tests cover every reconciliation case, every policy rule
+- **Process:** built test-first. About 400 tests cover every reconciliation case, every policy rule
   (including attempts to bypass it), the queue lifecycle and audit tampering.
 
 ## Challenges we ran into

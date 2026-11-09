@@ -99,6 +99,7 @@ def proposal_hash(p: Proposal) -> str:
 
 
 STALE_EXECUTING_SECONDS = 300  # a run that crashed mid-call may be retried after this
+KEEP = object()  # approve/execute: keep the stored limit
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -128,6 +129,7 @@ class QueueItem:
     first_at: datetime | None = None
     approvals_needed: int = 1
     approved_hash: str | None = None
+    started_at: datetime | None = None
 
     def to_dict(self) -> dict:
         p = proposal_to_dict(self.proposal)
@@ -141,12 +143,14 @@ class QueueItem:
 
 class ApprovalQueue:
     def __init__(self, path: Path | str, *, policy: Policy | None = None,
-                 clock: Callable[[], datetime] | None = None, on_event: Callable[[dict], None] | None = None):
+                 clock: Callable[[], datetime] | None = None, on_event: Callable[[dict], None] | None = None,
+                 witness: Callable[[str], list[dict] | None] | None = None):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.policy = policy or Policy()
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.on_event = on_event
+        self.witness = witness  # item id -> its approval records from the audit log (None: log broken)
         with self._conn() as con:
             con.executescript(SCHEMA)
             cols = {r[1] for r in con.execute("pragma table_info(queue_items)")}
@@ -173,7 +177,8 @@ class ApprovalQueue:
             decided_by=r["decided_by"], note=r["note"], request_id=r["request_id"],
             executed_at=_dt(r["executed_at"]), result=json.loads(r["result"]) if r["result"] else None,
             error=r["error"], invoice_due=Money(Decimal(due["value"]), due["currency_code"]) if due else None,
-            first_by=r["first_by"], first_at=_dt(r["first_at"]), approved_hash=r["approved_hash"])
+            first_by=r["first_by"], first_at=_dt(r["first_at"]), approved_hash=r["approved_hash"],
+            started_at=_dt(r["started_at"]))
 
     def get(self, item_id: str) -> QueueItem:
         with self._conn() as con:
@@ -199,7 +204,8 @@ class ApprovalQueue:
         for i in self.list():
             if i.id == exclude:
                 continue
-            at = i.executed_at or i.decided_at or i.created_at
+            # a run counts from when it started, so in-flight calls count toward the hourly cap at once
+            at = i.started_at or i.executed_at or i.decided_at or i.created_at
             out.append(HistoryEntry(i.proposal.intent_key, HISTORY_STATUS[i.status], at, i.request_id, i.id))
         return out
 
@@ -217,6 +223,34 @@ class ApprovalQueue:
         with self._conn() as con:
             con.execute(f"update queue_items set {sets} where id = ?", (*cols.values(), item_id))
         return self.get(item_id)
+
+    @contextmanager
+    def _locked(self):
+        """One state transition at a time, across threads and processes: read, check and write
+        inside a single BEGIN IMMEDIATE transaction, so nothing changes between the check and the write."""
+        con = sqlite3.connect(self.path, timeout=30, isolation_level=None)
+        con.row_factory = sqlite3.Row
+        try:
+            con.execute("begin immediate")
+            try:
+                yield con
+            except BaseException:
+                con.execute("rollback")
+                raise
+            con.execute("commit")
+        finally:
+            con.close()
+
+    def _read(self, con, item_id: str) -> QueueItem:
+        r = con.execute("select * from queue_items where id = ?", (item_id,)).fetchone()
+        if r is None:
+            raise KeyError(item_id)
+        return self._with_needed(self._row_to_item(r))
+
+    @staticmethod
+    def _write(con, item_id: str, **cols) -> None:
+        sets = ", ".join(f"{k} = ?" for k in cols)
+        con.execute(f"update queue_items set {sets} where id = ?", (*cols.values(), item_id))
 
     def _check(self, item: QueueItem, request_id: str | None = None):
         # The proposal's own history entry is identified by the queue item id.
@@ -245,8 +279,20 @@ class ApprovalQueue:
         return item
 
     def _block(self, item: QueueItem, d) -> None:
+        """Outside a transition: record the block and raise."""
         status = "expired" if "expired" in d.codes else "blocked"
         item = self._update(item.id, status=status, policy=json.dumps(d.to_dict()))
+        self._emit(status, item, violations=d.violations)
+        raise PolicyBlocked(item, d.violations)
+
+    def _block_in(self, con, item: QueueItem, d) -> tuple:
+        status = "expired" if "expired" in d.codes else "blocked"
+        self._write(con, item.id, status=status, policy=json.dumps(d.to_dict()))
+        return status, d
+
+    def _raise_blocked(self, item_id: str, blocked) -> None:
+        status, d = blocked
+        item = self.get(item_id)
         self._emit(status, item, violations=d.violations)
         raise PolicyBlocked(item, d.violations)
 
@@ -254,42 +300,61 @@ class ApprovalQueue:
     def _same_person(a: str | None, b: str | None) -> bool:
         return _person(a) == _person(b)
 
-    def _tampered(self, item: QueueItem) -> None:
-        """Block when the stored proposal differs from what was approved."""
+    @staticmethod
+    def _tamper_decision(item: QueueItem):
+        """A block decision when the stored proposal differs from what was approved, else None."""
         from .policy import Decision
         if item.approved_hash and proposal_hash(item.proposal) != item.approved_hash:
-            self._block(item, Decision(False, [{"code": "integrity",
-                                                "message": "the proposal changed after it was approved"}]))
+            return Decision(False, [{"code": "integrity", "message": "the proposal changed after it was approved"}])
+        return None
 
-    def approve(self, item_id: str, *, by: str) -> QueueItem:
-        item = self.get(item_id)
-        if item.status not in ("pending", "awaiting_second"):
-            raise NotExecutable(f"{item_id} is {item.status}; only pending items can be approved")
-        if item.status == "awaiting_second" and self._same_person(by, item.first_by):
-            raise NotExecutable(f"{item_id} was first approved by {item.first_by}; "
-                                f"a different person must give the second approval")
-        if item.status == "awaiting_second":
-            self._tampered(item)  # the second approver must approve what the first one saw
-        d = self._check(item)
-        if not d.allowed:
-            self._block(item, d)
-        now = _iso(self.clock())
-        h = item.approved_hash or proposal_hash(item.proposal)
-        if item.status == "pending" and item.approvals_needed > 1:
-            item = self._update(item_id, status="awaiting_second", first_by=by, first_at=now,
+    def _set_limit(self, con, item: QueueItem, limit) -> QueueItem:
+        """Replace the stored limit with one re-read from current data (see Desk)."""
+        if limit is not KEEP:
+            item.invoice_due = limit
+            self._write(con, item.id, invoice_due=json.dumps(limit.to_paypal()) if limit else None)
+        return item
+
+    def approve(self, item_id: str, *, by: str, limit=None) -> QueueItem:
+        limit = KEEP if limit is None else limit
+        blocked = event = None
+        with self._locked() as con:
+            item = self._read(con, item_id)
+            if item.status not in ("pending", "awaiting_second"):
+                raise NotExecutable(f"{item_id} is {item.status}; only pending items can be approved")
+            if item.status == "awaiting_second" and self._same_person(by, item.first_by):
+                raise NotExecutable(f"{item_id} was first approved by {item.first_by}; "
+                                    f"a different person must give the second approval")
+            item = self._set_limit(con, item, limit)
+            # the second approver must approve what the first one saw
+            d = (self._tamper_decision(item) if item.status == "awaiting_second" else None) or self._check(item)
+            if not d.allowed:
+                blocked = self._block_in(con, item, d)
+            else:
+                now = _iso(self.clock())
+                h = item.approved_hash or proposal_hash(item.proposal)
+                if item.status == "pending" and item.approvals_needed > 1:
+                    self._write(con, item_id, status="awaiting_second", first_by=by, first_at=now,
                                 policy=json.dumps(d.to_dict()), approved_hash=h)
-            self._emit("first_approval", item, by=by)
-            return item
-        item = self._update(item_id, status="approved", decided_at=now, decided_by=by, policy=json.dumps(d.to_dict()),
-                            approved_hash=h)
-        self._emit("approved", item, by=by, **({"first_by": item.first_by} if item.first_by else {}))
+                    event = ("first_approval", {"by": by, "proposal_hash": h})
+                else:
+                    self._write(con, item_id, status="approved", decided_at=now, decided_by=by,
+                                policy=json.dumps(d.to_dict()), approved_hash=h)
+                    event = ("approved", {"by": by, "proposal_hash": h,
+                                          **({"first_by": item.first_by} if item.first_by else {})})
+        if blocked:
+            self._raise_blocked(item_id, blocked)
+        item = self.get(item_id)
+        self._emit(event[0], item, **event[1])
         return item
 
     def reject(self, item_id: str, *, by: str, note: str | None = None) -> QueueItem:
+        with self._locked() as con:
+            item = self._read(con, item_id)
+            if item.status not in ("pending", "awaiting_second"):
+                raise NotExecutable(f"{item_id} is {item.status}; only pending items can be rejected")
+            self._write(con, item_id, status="rejected", decided_at=_iso(self.clock()), decided_by=by, note=note)
         item = self.get(item_id)
-        if item.status not in ("pending", "awaiting_second"):
-            raise NotExecutable(f"{item_id} is {item.status}; only pending items can be rejected")
-        item = self._update(item_id, status="rejected", decided_at=_iso(self.clock()), decided_by=by, note=note)
         self._emit("rejected", item, by=by, note=note)
         return item
 
@@ -297,39 +362,69 @@ class ApprovalQueue:
         out = []
         for item in self.list(status="pending") + self.list(status="awaiting_second"):
             if self.clock() - item.created_at > self.policy.config.expiry:
-                item = self._update(item.id, status="expired")
+                with self._locked() as con:
+                    cur = con.execute("update queue_items set status = 'expired' where id = ? "
+                                      "and status in ('pending', 'awaiting_second')", (item.id,))
+                    if cur.rowcount != 1:
+                        continue
+                item = self.get(item.id)
                 self._emit("expired", item)
                 out.append(item.id)
         return out
 
-    def execute(self, item_id: str, client: PayPalClient) -> QueueItem:
+    def _witnessed(self, item: QueueItem) -> str | None:
+        """Why the approval isn't backed by the audit log, or None. The queue row can be edited by
+        anyone with the database; the hash-chained audit log must also show the approval(s) of this
+        exact proposal fingerprint, by the people the row names."""
+        if self.witness is None:
+            return None
+        recs = self.witness(item.id)
+        if recs is None:
+            return "the audit log does not verify"
+        def by(ev: str) -> list[str]:
+            return [r.get("by") for r in recs if r.get("event") == ev and r.get("proposal_hash") == item.approved_hash]
+        final = by("approved")
+        if not any(self._same_person(b, item.decided_by) for b in final):
+            return "no approval of this exact proposal is recorded in the audit log"
+        if item.approvals_needed > 1:
+            firsts = by("first_approval")
+            if not any(self._same_person(f, item.first_by) and not self._same_person(f, item.decided_by) for f in firsts):
+                return "the audit log does not show two different approvers for this exact proposal"
+        return None
+
+    def execute(self, item_id: str, client: PayPalClient, *, limit=None) -> QueueItem:
+        limit = KEEP if limit is None else limit
         item = self.get(item_id)
         if item.status == "executed":
             return item  # idempotent: never send twice
-        if item.status not in EXECUTABLE:
-            raise NotExecutable(f"{item_id} is {item.status}; it was never approved")
-        if item.approvals_needed > 1 and (not item.first_by or not item.decided_by
-                                          or self._same_person(item.first_by, item.decided_by)):
-            raise NotExecutable(f"{item_id} needs two different approvers before it can run")
-        if not item.approved_hash:
-            raise NotExecutable(f"{item_id} has no approval fingerprint; approve it again")
-        self._tampered(item)
-        request_id = item.request_id or f"cashdesk-{item.id}-{secrets.token_hex(4)}"
-        d = self._check(item, request_id=request_id)
-        if not d.allowed:
-            self._block(item, d)
-        # compare-and-set: of two simultaneous runs, exactly one goes on
-        now = self.clock()
-        stale = _iso(now - timedelta(seconds=STALE_EXECUTING_SECONDS))
-        with self._conn() as con:
-            cur = con.execute(
-                """update queue_items set status = 'executing', request_id = ?, started_at = ?
-                   where id = ? and (status in ('approved', 'failed')
-                                     or (status = 'executing' and (started_at is null or started_at < ?)))""",
-                (request_id, _iso(now), item_id, stale))
-            won = cur.rowcount == 1
-        if not won:
-            raise NotExecutable(f"{item_id} is already running")
+        blocked = None
+        with self._locked() as con:  # check and claim in one transaction: of two runs, one goes on
+            item = self._read(con, item_id)
+            if item.status == "executed":
+                return item
+            stale = self.clock() - timedelta(seconds=STALE_EXECUTING_SECONDS)
+            if item.status == "executing" and item.started_at and item.started_at >= stale:
+                raise NotExecutable(f"{item_id} is already running")
+            if item.status not in EXECUTABLE:
+                raise NotExecutable(f"{item_id} is {item.status}; it was never approved")
+            if item.approvals_needed > 1 and (not item.first_by or not item.decided_by
+                                              or self._same_person(item.first_by, item.decided_by)):
+                raise NotExecutable(f"{item_id} needs two different approvers before it can run")
+            if not item.approved_hash:
+                raise NotExecutable(f"{item_id} has no approval fingerprint; approve it again")
+            why = self._witnessed(item)
+            if why:
+                raise NotExecutable(f"{item_id}: {why}")
+            item = self._set_limit(con, item, limit)
+            request_id = item.request_id or f"cashdesk-{item.id}-{secrets.token_hex(4)}"
+            d = self._tamper_decision(item) or self._check(item, request_id=request_id)
+            if not d.allowed:
+                blocked = self._block_in(con, item, d)
+            else:
+                # started_at counts this run toward the hourly cap from now, not from its approval
+                self._write(con, item_id, status="executing", request_id=request_id, started_at=_iso(self.clock()))
+        if blocked:
+            self._raise_blocked(item_id, blocked)
         item = self.get(item_id)
         self._emit("executing", item, request_id=request_id, api_calls=item.proposal.api_calls)
         try:
