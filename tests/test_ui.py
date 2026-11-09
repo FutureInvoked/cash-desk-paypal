@@ -118,3 +118,18 @@ def test_resync_handles_a_dead_server():
     h = HTML[HTML.index('getElementById("sync").onclick'):]
     h = h[:h.index("};")]
     assert "catch" in h and "showBanner" in h
+
+
+def test_two_person_approval_in_the_dialog():
+    # a first approval of a large refund is recorded and does NOT run; only the second runs it
+    handler = HTML[HTML.index("async function confirmAndRun"):]
+    handler = handler[:handler.index("\n}\n")]
+    assert 'state !== "awaiting_second"' in handler
+    assert "awaiting_second" in HTML and "Needs a 2nd approver" in HTML and "approvals_needed" in HTML
+    assert "first_by" in HTML and "Two-person rule" in HTML
+
+
+def test_overpayment_refund_and_journal_export_are_on_the_board():
+    assert 'refund_overpayment: "Refund overpayment"' in HTML
+    assert 'id="export-journal"' in HTML and 'href="/api/export/journal.csv"' in HTML
+

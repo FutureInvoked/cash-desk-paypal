@@ -32,8 +32,10 @@
   h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
   .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; }
   .badge { padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); }
-  button { font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid var(--border);
+  button, a.button { font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid var(--border);
            background: var(--surface); color: var(--text); padding: 6px 12px; }
+  a.button { text-decoration: none; display: inline-block; }
+  .header-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
   button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
   button:disabled { opacity: .5; cursor: default; }
   nav.tabs { display: flex; gap: 4px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -77,6 +79,7 @@
   #approvals-grid { height: calc(100vh - 290px); min-height: 380px; }
   .row-actions { display: flex; gap: 6px; align-items: center; height: 100%; }
   .row-actions button { padding: 3px 10px; font-size: 12px; }
+  #confirm-two .two { background: var(--surface-2); border-left: 3px solid var(--accent); padding: 8px 10px; border-radius: 6px; }
   button.danger { color: var(--bad); }
   dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text);
            width: min(720px, calc(100vw - 32px)); padding: 18px 20px; }
@@ -119,7 +122,11 @@
       <span class="badge" id="ai">AI: …</span>
     </div>
   </div>
-  <button class="primary" id="sync">Re-sync PayPal</button>
+  <div class="header-actions">
+    <a class="button" id="export-journal" href="/api/export/journal.csv" download
+       title="One balanced journal entry per PayPal payment and refund, for your accounting system">Export journal (CSV)</a>
+    <button class="primary" id="sync">Re-sync PayPal</button>
+  </div>
 </header>
 <div class="banner" id="banner" role="alert" hidden></div>
 <section class="kpis" aria-label="Summary">
@@ -158,6 +165,7 @@
       <p id="confirm-why" class="sub"></p>
       <div id="confirm-calls"></div>
       <div id="confirm-policy"></div>
+      <div id="confirm-two"></div>
       <label class="field" id="confirm-note-wrap">Note (optional)<input id="confirm-note" maxlength="500"></label>
       <label class="field">Approved by<input id="confirm-by" value="owner" required maxlength="80"></label>
       <p id="confirm-error" class="error" role="alert"></p>
@@ -422,12 +430,13 @@ async function loadAudit() {
 const SANDBOX = "https://api-m.sandbox.paypal.com";
 const QSTATUS = {
   pending: { label: "Waiting for you", tone: "info" }, approved: { label: "Approved", tone: "info" },
+  awaiting_second: { label: "Needs a 2nd approver", tone: "warn" },
   executing: { label: "Running", tone: "neutral" }, executed: { label: "Done", tone: "ok" },
   failed: { label: "Failed (retry)", tone: "bad" }, rejected: { label: "Rejected", tone: "neutral" },
   blocked: { label: "Blocked by policy", tone: "bad" }, expired: { label: "Expired", tone: "neutral" },
 };
 const ACTION = { send_reminder: "Send reminder", create_draft_invoice: "Create + send invoice",
-  record_payment: "Record payment", refund_capture: "Refund duplicate" };
+  record_payment: "Record payment", refund_capture: "Refund duplicate", refund_overpayment: "Refund overpayment" };
 const qpill = st => { const s = QSTATUS[st] || { label: st, tone: "neutral" }; return `<span class="pill tone-${s.tone}">${esc(s.label)}</span>`; };
 let approvalsApi = null, approvals = [], current = null, lastFocus = null;
 
@@ -436,12 +445,14 @@ ActionsRenderer.prototype.init = function (p) {
   const it = p.data;
   this.e = document.createElement("div");
   this.e.className = "row-actions";
-  if (it.status === "pending") {
-    this.e.innerHTML = `<button class="primary" data-act="approve">Approve…</button><button class="danger" data-act="reject">Reject…</button>`;
+  if (it.status === "pending" || it.status === "awaiting_second") {
+    const label = it.status === "awaiting_second" ? "2nd approval…" : "Approve…";
+    this.e.innerHTML = `<button class="primary" data-act="approve">${label}</button><button class="danger" data-act="reject">Reject…</button>`;
   } else if (it.status === "approved" || it.status === "failed") {
     this.e.innerHTML = `<button class="primary" data-act="retry">${it.status === "failed" ? "Retry" : "Run"}…</button>`;
   } else {
-    this.e.innerHTML = `<span class="sub">${esc(it.decided_by ? "by " + it.decided_by : "")}</span>`;
+    const who = [it.first_by, it.decided_by].filter(Boolean).join(" + ");
+    this.e.innerHTML = `<span class="sub">${esc(who ? "by " + who : "")}</span>`;
   }
   this.e.querySelectorAll("button").forEach(b => b.onclick = () => openConfirm(it, b.dataset.act));
 };
@@ -473,7 +484,10 @@ function openConfirm(it, act) {
   current = { it, act };
   lastFocus = document.activeElement;
   const reject = act === "reject";
+  const two = !reject && act === "approve" && it.approvals_needed > 1;
+  const second = two && it.status === "awaiting_second";
   document.getElementById("confirm-title").textContent = reject ? "Reject this action" :
+    two ? `${ACTION[it.proposal.type] || it.proposal.type}: ${second ? "second approval, then run" : "first of two approvals"}` :
     `${ACTION[it.proposal.type] || it.proposal.type}: approve and run`;
   document.getElementById("confirm-why").textContent = it.proposal.reason;
   document.getElementById("confirm-calls").innerHTML = (reject ? "<p>Nothing will be sent to PayPal.</p>" :
@@ -485,11 +499,17 @@ function openConfirm(it, act) {
   document.getElementById("confirm-policy").innerHTML = it.policy.allowed
     ? '<p class="sub">Policy check: <span class="pill tone-ok">passes</span> (checked again right before the call)</p>'
     : `<p class="sub">Policy check failed:</p><ul class="violations">${v.map(x => `<li>${esc(x.message)}</li>`).join("")}</ul>`;
+  document.getElementById("confirm-two").innerHTML = !two ? "" : second
+    ? `<p class="two"><strong>Two-person rule:</strong> first approved by <strong>${esc(it.first_by)}</strong>. A different person must approve now; the call runs right after.</p>`
+    : `<p class="two"><strong>Two-person rule:</strong> refunds above 500.00 need two different people. Your approval is recorded, and nothing runs until a second person approves.</p>`;
+  const byInput = document.getElementById("confirm-by");
+  byInput.value = second ? "" : "owner";
+  byInput.placeholder = second ? `someone other than ${it.first_by}` : "";
   document.getElementById("confirm-note-wrap").style.display = reject ? "" : "none";
   document.getElementById("confirm-note").value = "";
   document.getElementById("confirm-error").textContent = "";
   const run = document.getElementById("confirm-run");
-  run.textContent = reject ? "Reject" : (act === "retry" ? "Run now" : "Approve and run");
+  run.textContent = reject ? "Reject" : (act === "retry" ? "Run now" : (two && !second ? "Approve (1 of 2)" : "Approve and run"));
   run.className = reject ? "danger" : "primary";
   run.disabled = false;
   document.getElementById("confirm").showModal();
@@ -516,8 +536,10 @@ async function confirmAndRun() {
     if (act === "reject") {
       await post(`/api/approvals/${it.id}/reject`, { by, note: document.getElementById("confirm-note").value || null });
     } else {
-      if (act === "approve") await post(`/api/approvals/${it.id}/approve`, { by });
-      await post(`/api/approvals/${it.id}/execute`);
+      let state = it.status;
+      if (act === "approve") state = (await post(`/api/approvals/${it.id}/approve`, { by })).status;
+      // first of two approvals: recorded, nothing runs until a different person approves
+      if (state !== "awaiting_second") await post(`/api/approvals/${it.id}/execute`);
     }
     document.getElementById("confirm").close();
   } catch (e) {
@@ -535,7 +557,7 @@ async function loadApprovals() {
     approvals = (await r.json()).items.slice().reverse();
     approvalsApi.setGridOption("rowData", approvals);
     approvalsApi.redrawRows();  // re-apply status row classes for updated items
-    const pending = approvals.filter(i => i.status === "pending").length;
+    const pending = approvals.filter(i => i.status === "pending" || i.status === "awaiting_second").length;
     document.querySelector('nav.tabs button[data-tab="approvals"]').textContent = pending ? `Approvals (${pending})` : "Approvals";
   } catch (e) {
     approvalsApi.setGridOption("overlayNoRowsTemplate", `<span class="state">Could not load approvals (${esc(e.message)}).</span>`);
@@ -547,7 +569,8 @@ document.addEventListener("DOMContentLoaded", () => {
   approvalsApi = agGrid.createGrid(document.getElementById("approvals-grid"), {
     columnDefs: approvalCols, rowData: [], getRowId: p => p.data.id,
     defaultColDef: { sortable: true, resizable: true, suppressHeaderMenuButton: true },
-    getRowClass: p => ({ failed: "row-exception", blocked: "row-exception", pending: "row-attention" }[p.data.status] || ""),
+    getRowClass: p => ({ failed: "row-exception", blocked: "row-exception", pending: "row-attention",
+                         awaiting_second: "row-attention" }[p.data.status] || ""),
     overlayNoRowsTemplate: '<span class="state">No proposed actions yet. Press “Propose actions” to let the agent suggest what to do.</span>',
     theme: gridOptions.theme,
   });

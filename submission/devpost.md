@@ -37,18 +37,24 @@ Cash Desk pulls PayPal transactions (Transaction Search) and invoices (Invoicing
   - send a payment reminder for an overdue invoice;
   - create and send an invoice for an unbilled payment;
   - record a payment the AI matched;
-  - refund a duplicate payment.
+  - refund a duplicate payment;
+  - refund only the overpaid part of a payment (a partial refund capped at the excess).
 - **Gates every action.** A policy engine checks:
   - the action allowlist;
-  - amount caps (refunds up to 1,000; recorded payments never more than the amount still owed);
+  - amount caps (refunds up to 1,000; recorded payments never more than the amount still owed;
+    overpayment refunds never more than the amount overpaid);
   - call integrity;
   - a rate cap of 10 per hour;
   - duplicate intent;
   - expiry.
 
   A human then sees the exact sandbox request (method, URL, JSON body, `PayPal-Request-Id`) and
-  approves or rejects it. The policy runs again just before the call. Rejected, expired or blocked
-  actions never run.
+  approves or rejects it. Refunds above 500 need **two different people**: the first approval is
+  only recorded, and the executor refuses a large refund without two distinct approvers. The
+  policy runs again just before the call. Rejected, expired or blocked actions never run.
+- **Exports the books.** One click downloads a journal (CSV) with one balanced entry per payment
+  and refund: net to the PayPal balance, the fee to PayPal fees, and the gross to receivables,
+  customer credits (duplicates, overpayments) or unapplied payments.
 - **Proves it.** Every proposal, approval, rejection and PayPal call goes into an append-only,
   hash-chained audit log with a one-command verifier. The board shows the chain status and the head hash.
 
@@ -109,7 +115,7 @@ AG Grid board.
   (`cashdesk-<item>`; a retry never double-refunds), plus a sha256 hash-chained audit log.
 - **Frontend:** a single HTML page with AG Grid Community 36.2.0 from a CDN. There is no build step,
   and light and dark themes are supported.
-- **Process:** built test-first. About 260 tests cover every reconciliation case, every policy rule
+- **Process:** built test-first. About 290 tests cover every reconciliation case, every policy rule
   (including attempts to bypass it), the queue lifecycle and audit tampering.
 
 ## Challenges we ran into
@@ -140,9 +146,9 @@ leave the last click to a person, with enough evidence that the click takes two 
 ## What's next
 
 - Webhooks (`PAYMENT.CAPTURE.COMPLETED`, `INVOICING.INVOICE.PAID`) instead of polling.
-- Partial refunds for overpayments, and write-off suggestions for fee shortfalls.
-- Multi-user approvals: two people for refunds above a threshold.
-- An export to the accounting system (journal entries for fees and refunds).
+- Real user accounts behind the two-person rule (today approvers type their name).
+- Write-off suggestions for fee shortfalls.
+- Direct export to accounting systems (today it's a CSV journal).
 
 ## Built with
 

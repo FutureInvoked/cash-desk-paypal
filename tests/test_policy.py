@@ -48,7 +48,9 @@ def check(p, history=(), policy=None, now=NOW, created=CREATED, **kw):
 
 def test_all_fixture_proposals_pass_by_default(props):
     for key, p in props.items():
-        d = check(p, invoice_due=Money(Decimal("1500.00"), "USD") if p.type == "record_payment" else None)
+        limit = {"record_payment": Money(Decimal("1500.00"), "USD"),
+                 "refund_overpayment": Money(Decimal("45.00"), "USD")}.get(p.type)
+        d = check(p, invoice_due=limit)
         assert d.allowed, (key, d.violations)
 
 

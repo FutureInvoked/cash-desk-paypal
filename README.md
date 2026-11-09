@@ -3,9 +3,10 @@
 **An AI reconciliation and collections desk for small businesses that get paid through PayPal.**
 It pulls PayPal transactions and invoices, matches every payment to an invoice, explains every
 match and every exception in plain words, and proposes the next actions: payment reminders, draft
-invoices for money nobody billed, recording a payment, refunding a duplicate. Nothing moves money
-on its own. Every action passes a policy check and a human approval, runs with a PayPal idempotency
-key, and lands in a hash-chained audit log you can verify.
+invoices for money nobody billed, recording a payment, refunding a duplicate or just the overpaid
+part of a payment. Nothing moves money on its own. Every action passes a policy check and a human
+approval (two different people for refunds above 500), runs with a PayPal idempotency key, and lands
+in a hash-chained audit log you can verify. One click exports a balanced journal for your accounting system.
 
 ![Reconciliation grid](docs/screenshots/b2-reconciliation-grid.jpg)
 
@@ -23,7 +24,7 @@ make demo          # installs into .venv, serves http://localhost:8000 with samp
 Other commands:
 
 ```bash
-make test          # 260+ tests: matcher, AI layer (mocked), policy, queue, audit, API, UI contract
+make test          # 290+ tests: matcher, AI layer (mocked), policy, queue, audit, API, UI contract
 make audit-verify  # verifies the hash chain of var/audit.jsonl
 make eval          # scores reconciliation against the expected outcomes in evals/match_eval.json
 ```
@@ -33,11 +34,16 @@ make eval          # scores reconciliation against the expected outcomes in eval
 1. **Reconciliation** groups every payment and invoice by status, with exceptions first:
    duplicate, overpaid, partial, fee short, currency mismatch, unmatched, overdue and suggested match.
    Each row has a one-line reason that cites the PayPal fields it relies on. Click a row to see the evidence.
-2. **Approvals → Propose actions.** The agent proposes six actions. **Approve…** shows exactly
+2. **Approvals → Propose actions.** The agent proposes seven actions. **Approve…** shows exactly
    which sandbox call will run: method, full URL, JSON body and `PayPal-Request-Id`. The action
    runs only after you confirm. **Reject…** takes a note.
+   - The 800.00 duplicate refund is above the two-person threshold: the first approval is only
+     recorded ("Needs a 2nd approver"), and it runs after a different person approves.
+   - The 45.00 overpayment on NW-1014 gets a partial refund of exactly the overpaid amount.
 3. **Audit log** shows every proposal, approval, rejection and PayPal call, plus a banner that
    verifies the hash chain and the head hash to copy elsewhere.
+4. **Export journal (CSV)**, top right, downloads one balanced journal entry per payment and refund
+   (see [Accounting export](#accounting-export)).
 
 ![Approve dialog](docs/screenshots/b3-approve-dialog.jpg)
 
@@ -124,11 +130,31 @@ The AI layer is in `cashdesk/ai.py`, with the prompt in `cashdesk/prompts/reconc
 | Layer | What it does | Code |
 |---|---|---|
 | Proposals only | The agent writes proposals that carry the exact PayPal calls; it can't execute | `cashdesk/actions.py` |
-| Policy | Checks the allowlist (four actions only), positive amounts in USD or EUR, per-action caps (refunds ≤ 1,000; record payment ≤ amount still owed), call integrity (method, path, body amounts must equal the proposal; no host or path tricks), a rate cap (10 per hour), one live action per target, no reuse of a `PayPal-Request-Id`, and 24-hour expiry | `cashdesk/policy.py` |
+| Policy | Checks the allowlist (five actions only), positive amounts in USD or EUR, per-action caps (refunds ≤ 1,000; record payment ≤ amount still owed; an overpayment refund ≤ the amount overpaid, a limit stored apart from the proposal), call integrity (method, path, body amounts must equal the proposal; no host or path tricks), a rate cap (10 per hour), one live action per target, no reuse of a `PayPal-Request-Id`, and 24-hour expiry | `cashdesk/policy.py` |
 | Approval queue | A human approves or rejects each action. The policy runs again at approval and again right before the PayPal call, against the proposal as stored. Rejected, expired, blocked or unapproved items never execute (tested). | `cashdesk/queue.py` |
+| Two-person rule | Refunds above 500.00 need two different approvers. The first approval is only recorded; the second must come from someone else, and the executor refuses to run a large refund that lacks two distinct approvers even if the database is edited. The threshold is set in `PolicyConfig` (`None` turns it off). The board has no logins yet, so approver names are typed in; in production they would come from user accounts. | `cashdesk/policy.py`, `cashdesk/queue.py` |
 | Idempotency | Every call carries `PayPal-Request-Id: cashdesk-<item>`. A retry never double-refunds, and an executed item returns its stored result. | `cashdesk/queue.py` |
 | Audit | Append-only JSONL. Each record holds the sha256 of its canonical JSON and the previous hash, and a head pointer catches truncation. `make audit-verify` reports the first bad record. Secret-looking fields are redacted. | `cashdesk/audit.py` |
 | Sandbox only | The client refuses any base URL other than `api-m.sandbox.paypal.com` | `cashdesk/config.py` |
+
+## Accounting export
+
+`GET /api/export/journal.csv` (the **Export journal (CSV)** button) turns the reconciliation into
+journal entries a bookkeeper can import. Each PayPal payment or refund becomes one entry that
+balances in its own currency, with columns `date, entry_id, account, debit, credit, currency,
+invoice_number, paypal_transaction_id, event_code, memo`.
+
+| PayPal row | Debit | Credit |
+|---|---|---|
+| Payment matched to an invoice (also partial or short by the fee) | PayPal balance (net), PayPal fees | Accounts receivable (gross); the memo says what stays open |
+| Overpayment | PayPal balance, PayPal fees | Accounts receivable (invoice part), Customer credits (excess) |
+| Duplicate payment | PayPal balance, PayPal fees | Customer credits |
+| Payment with no invoice, or in the wrong currency | PayPal balance, PayPal fees | Unapplied payments |
+| Refund | Customer credits (duplicate or overpayment) or Accounts receivable | PayPal balance, PayPal fees (fee returned) |
+
+Pending payments, currency conversions and bank withdrawals are not booked. Account names are plain
+so they can be mapped to any chart of accounts. Text that payers wrote is escaped so a spreadsheet
+can't run it as a formula.
 
 ## PayPal APIs used
 
@@ -145,7 +171,7 @@ field for field, and a test walks every key.
 | Invoicing v2 | `POST /v2/invoicing/invoices/{invoice_id}/send` | send that invoice |
 | Invoicing v2 | `POST /v2/invoicing/invoices/{invoice_id}/remind` | payment reminder for an overdue invoice |
 | Invoicing v2 | `POST /v2/invoicing/invoices/{invoice_id}/payments` | record a payment the AI matched |
-| Payments v2 | `POST /v2/payments/captures/{capture_id}/refund` | refund a duplicate payment |
+| Payments v2 | `POST /v2/payments/captures/{capture_id}/refund` | refund a duplicate payment, or only the overpaid part (partial refund) |
 
 ## Run it against the PayPal sandbox
 

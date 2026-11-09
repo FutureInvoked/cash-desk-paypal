@@ -4,7 +4,8 @@ It runs again just before execution (E5), so a proposal edited after approval, a
 burst still can't get through. Rules:
   allowlist         only the four action types, and only those enabled in config
   amount            a positive amount in an allowed currency
-  amount_cap        per-type caps; record_payment may not exceed what the invoice still owes
+  amount_cap        per-type caps; record_payment may not exceed what the invoice still owes, and
+                    refund_overpayment may not exceed what the customer overpaid
   integrity         the API calls are exactly the ones this type and target produce: method,
                     path (no host, no traversal), call count, and body amounts equal the proposal
   rate_cap          at most N approved/executed actions in a rolling hour
@@ -34,6 +35,7 @@ class PolicyConfig:
     enabled_types: frozenset = frozenset(ACTION_TYPES)
     caps: dict = field(default_factory=lambda: {
         "refund_capture": Decimal("1000.00"),
+        "refund_overpayment": Decimal("1000.00"),
         "create_draft_invoice": Decimal("5000.00"),
         "send_reminder": Decimal("50000.00"),
         "record_payment": Decimal("50000.00"),
@@ -42,6 +44,15 @@ class PolicyConfig:
     max_per_hour: int = 10
     expiry: timedelta = timedelta(hours=24)
     skew: timedelta = timedelta(minutes=5)
+    # two-person rule: these action types above this amount need two different approvers (None = off)
+    second_approval_over: Decimal | None = Decimal("500.00")
+    second_approval_types: frozenset = frozenset({"refund_capture", "refund_overpayment"})
+
+    def approvals_needed(self, p: Proposal) -> int:
+        if (self.second_approval_over is not None and p.type in self.second_approval_types
+                and p.amount is not None and p.amount.amount > self.second_approval_over):
+            return 2
+        return 1
 
 
 @dataclass(frozen=True)
@@ -79,6 +90,7 @@ def expected_paths(p: Proposal) -> list[tuple[str, str]]:
         "send_reminder": [("POST", f"/v2/invoicing/invoices/{t}/remind")],
         "record_payment": [("POST", f"/v2/invoicing/invoices/{t}/payments")],
         "refund_capture": [("POST", f"/v2/payments/captures/{t}/refund")],
+        "refund_overpayment": [("POST", f"/v2/payments/captures/{t}/refund")],
         "create_draft_invoice": [("POST", "/v2/invoicing/invoices"),
                                  ("POST", "/v2/invoicing/invoices/{new_invoice_id}/send")],
     }.get(p.type, [])
@@ -121,6 +133,12 @@ class Policy:
                     bad("amount_cap", "record_payment needs the invoice's outstanding amount to check against")
                 elif invoice_due.currency != amt.currency or amt.amount > invoice_due.amount:
                     bad("amount_cap", f"{amt} exceeds what the invoice still owes ({invoice_due})")
+            if p.type == "refund_overpayment":
+                # invoice_due carries the overpaid excess for this type, stored outside the proposal
+                if invoice_due is None:
+                    bad("amount_cap", "refund_overpayment needs the overpaid amount to check against")
+                elif invoice_due.currency != amt.currency or amt.amount > invoice_due.amount:
+                    bad("amount_cap", f"{amt} exceeds what the customer overpaid ({invoice_due})")
 
         # integrity
         for msg in self._integrity(p):
@@ -164,7 +182,7 @@ class Policy:
         if p.amount is None:
             return errs
         body = p.api_calls[0].get("body") or {}
-        if p.type in ("refund_capture", "record_payment"):
+        if p.type in ("refund_capture", "refund_overpayment", "record_payment"):
             if _money(body.get("amount")) != p.amount:
                 errs.append(f"body amount {body.get('amount')} differs from the proposal amount {p.amount}")
         if p.type == "create_draft_invoice":

@@ -2,6 +2,8 @@
 
 Lifecycle:  enqueue -> pending | blocked
             pending -> approved (human) | rejected (human) | expired
+            pending -> awaiting_second (first of two approvers, for large refunds) -> approved (a
+                       different second approver) | rejected | expired
             approved -> executing -> executed | failed (retryable with the same request id)
 The policy (cashdesk/policy.py) runs at enqueue, at approval and again right before execution,
 against the proposal as stored now, so tampering, expiry, rate bursts and duplicate intents are
@@ -44,11 +46,13 @@ create table if not exists queue_items (
     request_id text,
     executed_at text,
     result text,
-    error text
+    error text,
+    first_by text,
+    first_at text
 );
 """
 # queue status -> what the policy's history sees
-HISTORY_STATUS = {"pending": "pending", "approved": "approved", "executing": "approved", "failed": "approved",
+HISTORY_STATUS = {"pending": "pending", "awaiting_second": "pending", "approved": "approved", "executing": "approved", "failed": "approved",
                   "executed": "executed", "rejected": "rejected", "blocked": "rejected", "expired": "expired"}
 EXECUTABLE = {"approved", "executing", "failed"}
 
@@ -99,6 +103,9 @@ class QueueItem:
     result: dict | None
     error: str | None
     invoice_due: Money | None
+    first_by: str | None = None
+    first_at: datetime | None = None
+    approvals_needed: int = 1
 
     def to_dict(self) -> dict:
         p = proposal_to_dict(self.proposal)
@@ -106,7 +113,8 @@ class QueueItem:
                 "created_at": _iso(self.created_at), "decided_at": _iso(self.decided_at),
                 "decided_by": self.decided_by, "note": self.note, "request_id": self.request_id,
                 "executed_at": _iso(self.executed_at), "result": self.result, "error": self.error,
-                "invoice_due": self.invoice_due.to_paypal() if self.invoice_due else None}
+                "invoice_due": self.invoice_due.to_paypal() if self.invoice_due else None,
+                "first_by": self.first_by, "first_at": _iso(self.first_at), "approvals_needed": self.approvals_needed}
 
 
 class ApprovalQueue:
@@ -119,6 +127,10 @@ class ApprovalQueue:
         self.on_event = on_event
         with self._conn() as con:
             con.executescript(SCHEMA)
+            cols = {r[1] for r in con.execute("pragma table_info(queue_items)")}
+            for col in ("first_by", "first_at"):  # databases created before the two-person rule
+                if col not in cols:
+                    con.execute(f"alter table queue_items add column {col} text")
 
     @contextmanager
     def _conn(self):
@@ -138,14 +150,19 @@ class ApprovalQueue:
             policy=json.loads(r["policy"]), created_at=_dt(r["created_at"]), decided_at=_dt(r["decided_at"]),
             decided_by=r["decided_by"], note=r["note"], request_id=r["request_id"],
             executed_at=_dt(r["executed_at"]), result=json.loads(r["result"]) if r["result"] else None,
-            error=r["error"], invoice_due=Money(Decimal(due["value"]), due["currency_code"]) if due else None)
+            error=r["error"], invoice_due=Money(Decimal(due["value"]), due["currency_code"]) if due else None,
+            first_by=r["first_by"], first_at=_dt(r["first_at"]))
 
     def get(self, item_id: str) -> QueueItem:
         with self._conn() as con:
             r = con.execute("select * from queue_items where id = ?", (item_id,)).fetchone()
         if r is None:
             raise KeyError(item_id)
-        return self._row_to_item(r)
+        return self._with_needed(self._row_to_item(r))
+
+    def _with_needed(self, item: QueueItem) -> QueueItem:
+        item.approvals_needed = self.policy.config.approvals_needed(item.proposal)
+        return item
 
     def list(self, status: str | None = None) -> list[QueueItem]:
         with self._conn() as con:
@@ -153,7 +170,7 @@ class ApprovalQueue:
                 rows = con.execute("select * from queue_items where status = ? order by seq", (status,)).fetchall()
             else:
                 rows = con.execute("select * from queue_items order by seq").fetchall()
-        return [self._row_to_item(r) for r in rows]
+        return [self._with_needed(self._row_to_item(r)) for r in rows]
 
     def history(self, exclude: str | None = None) -> list[HistoryEntry]:
         out = []
@@ -209,21 +226,33 @@ class ApprovalQueue:
         self._emit(status, item, violations=d.violations)
         raise PolicyBlocked(item, d.violations)
 
+    @staticmethod
+    def _same_person(a: str | None, b: str | None) -> bool:
+        return (a or "").strip().casefold() == (b or "").strip().casefold()
+
     def approve(self, item_id: str, *, by: str) -> QueueItem:
         item = self.get(item_id)
-        if item.status != "pending":
+        if item.status not in ("pending", "awaiting_second"):
             raise NotExecutable(f"{item_id} is {item.status}; only pending items can be approved")
+        if item.status == "awaiting_second" and self._same_person(by, item.first_by):
+            raise NotExecutable(f"{item_id} was first approved by {item.first_by}; "
+                                f"a different person must give the second approval")
         d = self._check(item)
         if not d.allowed:
             self._block(item, d)
-        item = self._update(item_id, status="approved", decided_at=_iso(self.clock()), decided_by=by,
-                            policy=json.dumps(d.to_dict()))
-        self._emit("approved", item, by=by)
+        now = _iso(self.clock())
+        if item.status == "pending" and item.approvals_needed > 1:
+            item = self._update(item_id, status="awaiting_second", first_by=by, first_at=now,
+                                policy=json.dumps(d.to_dict()))
+            self._emit("first_approval", item, by=by)
+            return item
+        item = self._update(item_id, status="approved", decided_at=now, decided_by=by, policy=json.dumps(d.to_dict()))
+        self._emit("approved", item, by=by, **({"first_by": item.first_by} if item.first_by else {}))
         return item
 
     def reject(self, item_id: str, *, by: str, note: str | None = None) -> QueueItem:
         item = self.get(item_id)
-        if item.status != "pending":
+        if item.status not in ("pending", "awaiting_second"):
             raise NotExecutable(f"{item_id} is {item.status}; only pending items can be rejected")
         item = self._update(item_id, status="rejected", decided_at=_iso(self.clock()), decided_by=by, note=note)
         self._emit("rejected", item, by=by, note=note)
@@ -231,7 +260,7 @@ class ApprovalQueue:
 
     def expire_stale(self) -> list[str]:
         out = []
-        for item in self.list(status="pending"):
+        for item in self.list(status="pending") + self.list(status="awaiting_second"):
             if self.clock() - item.created_at > self.policy.config.expiry:
                 item = self._update(item.id, status="expired")
                 self._emit("expired", item)
@@ -244,6 +273,9 @@ class ApprovalQueue:
             return item  # idempotent: never send twice
         if item.status not in EXECUTABLE:
             raise NotExecutable(f"{item_id} is {item.status}; it was never approved")
+        if item.approvals_needed > 1 and (not item.first_by or not item.decided_by
+                                          or self._same_person(item.first_by, item.decided_by)):
+            raise NotExecutable(f"{item_id} needs two different approvers before it can run")
         request_id = f"cashdesk-{item.id}"
         d = self._check(item, request_id=request_id)
         if not d.allowed:
@@ -267,7 +299,7 @@ class ApprovalQueue:
         if p.type == "send_reminder":
             return client.send_reminder(p.target, note=body.get("note", ""), subject=body.get("subject"),
                                         request_id=rid)
-        if p.type == "refund_capture":
+        if p.type in ("refund_capture", "refund_overpayment"):
             return client.refund_capture(p.target, p.amount, request_id=rid,
                                          note_to_payer=body.get("note_to_payer", ""))
         if p.type == "record_payment":

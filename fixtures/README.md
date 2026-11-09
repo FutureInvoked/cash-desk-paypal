@@ -37,7 +37,7 @@ Amounts are strings; fees are negative; "today" is 2026-11-07.
 
 - `clean_match`: Payment clearly belongs to one open invoice. NW-1001..1010 carry the invoice number (rule 1); NW-1011..1012 match on exact amount plus payer email (rule 2).
 - `partial_payment`: Half of a 1200.00 invoice paid; 600.00 still due.
-- `overpayment`: 495.00 received for a 450.00 invoice (rush tip in the note).
+- `overpayment`: 495.00 received for a 450.00 invoice (rush tip in the note). Expected agent proposal: `refund_overpayment`.
 - `duplicate_payment`: Double checkout: two 800.00 captures 98 seconds apart for one invoice. The second is the refund candidate. Expected agent proposal: `refund_capture`.
 - `payment_without_invoice`: Money received with no invoice behind it (a deposit and a small licence sale). Expected agent proposal: `create_draft_invoice`.
 - `overdue_unpaid`: Sent invoices past their due date (as of 2026-11-07) with no payment. Expected agent proposal: `send_reminder`.

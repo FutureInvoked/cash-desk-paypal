@@ -66,6 +66,10 @@
     ],
     "expected": {
       "6FC0EA11FF213AF9E": "overpaid"
+    },
+    "proposed_action": {
+      "type": "refund_overpayment",
+      "transaction": "6FC0EA11FF213AF9E"
     }
   },
   "duplicate_payment": {

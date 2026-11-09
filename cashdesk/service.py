@@ -122,7 +122,7 @@ class Desk:
         return {**s, "payments": len(payments), "matched": len(matched), "matched_pct": round(100 * len(matched) / len(payments), 1) if payments else 0.0,
                 "unreconciled": {k: f"{v:.2f}" for k, v in sorted(unrec.items())},
                 "outstanding": {k: f"{v:.2f}" for k, v in sorted(outstanding.items())},
-                "pending_actions": len(self.queue.list(status="pending"))}
+                "pending_actions": len(self.queue.list(status="pending")) + len(self.queue.list(status="awaiting_second"))}
 
     # ---- proposals + approvals ----
     def refresh_proposals(self) -> dict:
@@ -131,12 +131,18 @@ class Desk:
         seen = {i.proposal.intent_key for i in self.queue.list() if i.status != "expired"}
         # what PayPal says each invoice still owes (before any suggested match is recorded)
         outstanding = {i.id: i.due for i in self.store.invoices()}
+        excess = {x.txn_id: x.difference for x in r.transactions if x.outcome == "overpaid" and x.difference}
         enq = skipped = 0
         for p in propose(r, self.store.invoices(), self.store.transactions(), as_of=self.as_of):
             if p.intent_key in seen:
                 skipped += 1
                 continue
-            due = outstanding.get(p.target) if p.type == "record_payment" else None
+            if p.type == "record_payment":
+                due = outstanding.get(p.target)
+            elif p.type == "refund_overpayment":
+                due = excess.get(p.target)  # the overpaid amount, from reconciliation, not the proposal
+            else:
+                due = None
             self.queue.enqueue(p, invoice_due=due)
             enq += 1
         return {"enqueued": enq, "skipped": skipped}
@@ -154,6 +160,11 @@ class Desk:
         item = self.queue.execute(item_id, self.client)
         self._result = None  # PayPal state changed; re-reconcile on next read (after a sync)
         return item.to_dict()
+
+    # ---- accounting export ----
+    def journal_csv(self) -> str:
+        from .journal import journal, to_csv
+        return to_csv(journal(self.result(), self.store.transactions()))
 
     # ---- audit ----
     def audit_view(self) -> dict:

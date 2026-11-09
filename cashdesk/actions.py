@@ -17,7 +17,7 @@ from datetime import date
 from .matcher import MatchResult
 from .models import Invoice, Money, Transaction
 
-ACTION_TYPES = {"send_reminder", "create_draft_invoice", "record_payment", "refund_capture"}
+ACTION_TYPES = {"send_reminder", "create_draft_invoice", "record_payment", "refund_capture", "refund_overpayment"}
 REQUEST_ID_PLACEHOLDER = "<set at execution>"
 BUSINESS = "Northwind Studio"
 
@@ -91,6 +91,19 @@ def propose(result: MatchResult, invoices: list[Invoice], txns: list[Transaction
                 [_call("POST", f"/v2/payments/captures/{t.id}/refund", body)],
                 f"Refund the duplicate payment: {r.reason}",
                 dict(r.evidence),
+            ))
+        # 2b. refund only the excess of an overpayment (a partial refund of the same capture)
+        elif r.outcome == "overpaid" and r.difference is not None and r.difference.amount > 0:
+            excess = r.difference
+            body = {"amount": excess.to_paypal(),
+                    "note_to_payer": f"Refund of {excess} overpaid on invoice {r.invoice_number}. "
+                                     f"The invoice is paid in full; thank you.",
+                    "invoice_id": r.invoice_number}
+            out.append(Proposal(
+                _pid("refund_overpayment", t.id), "refund_overpayment", t.id, r.invoice_number, excess,
+                [_call("POST", f"/v2/payments/captures/{t.id}/refund", body)],
+                f"Refund the overpaid {excess} (partial refund of this payment): {r.reason}",
+                {**r.evidence, "overpaid_by": str(excess)},
             ))
         # 3. draft + send an invoice for money received with no invoice
         elif r.outcome == "unmatched" and t.payer_email and t.amount.amount > 0:

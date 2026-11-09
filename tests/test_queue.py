@@ -44,6 +44,12 @@ def env(tmp_path):
 
 
 REFUND = "refund_capture:NW-1015"
+
+
+def approve_refund(q, item_id):
+    """The 800.00 duplicate refund is above the two-person threshold: two different approvers."""
+    q.approve(item_id, by="owner")
+    return q.approve(item_id, by="bookkeeper")
 REMIND = "send_reminder:NW-1016"
 RECORD = "record_payment:NW-1021"
 DRAFT = f"create_draft_invoice:{txn_id('unbilled-ravi')}"
@@ -123,7 +129,7 @@ def test_expire_stale_sweeps_pending_items(env):
 def test_approved_refund_executes_with_idempotency_key(env):
     q, c, props, _ = env
     item = q.enqueue(props[REFUND])
-    q.approve(item.id, by="owner")
+    approve_refund(q, item.id)
     done = q.execute(item.id, c)
     assert done.status == "executed" and done.result["status"] == "COMPLETED"
     assert done.request_id == f"cashdesk-{item.id}"
@@ -136,7 +142,7 @@ def test_approved_refund_executes_with_idempotency_key(env):
 def test_re_executing_returns_stored_result_without_a_second_call(env):
     q, c, props, _ = env
     item = q.enqueue(props[REFUND])
-    q.approve(item.id, by="owner")
+    approve_refund(q, item.id)
     first = q.execute(item.id, c)
     second = q.execute(item.id, FixturePayPalClient())  # a fresh client would double-refund if called
     assert second.result == first.result and len(c.calls) == 1
@@ -145,7 +151,7 @@ def test_re_executing_returns_stored_result_without_a_second_call(env):
 def test_crash_mid_execution_retries_with_the_same_request_id(env):
     q, c, props, _ = env
     item = q.enqueue(props[REFUND])
-    q.approve(item.id, by="owner")
+    approve_refund(q, item.id)
 
     class Boom(FixturePayPalClient):
         def refund_capture(self, *a, **kw):
@@ -187,7 +193,7 @@ def test_rate_cap_is_enforced_at_execution(env, tmp_path):
 def test_proposal_tampered_in_the_db_after_approval_is_blocked(env):
     q, c, props, _ = env
     item = q.enqueue(props[REFUND])
-    q.approve(item.id, by="owner")
+    approve_refund(q, item.id)
     q._tamper_for_test(item.id, lambda d: d["api_calls"][0]["body"]["amount"].update(value="999.00"))
     with pytest.raises(PolicyBlocked):
         q.execute(item.id, c)
@@ -232,7 +238,7 @@ def test_events_are_emitted_for_the_audit_log(env, tmp_path):
     events = []
     q = ApprovalQueue(tmp_path / "ev.db", clock=clock, on_event=events.append)
     a = q.enqueue(props[REFUND])
-    q.approve(a.id, by="owner")
+    approve_refund(q, a.id)
     q.execute(a.id, c)
-    assert [e["event"] for e in events] == ["enqueued", "approved", "executing", "executed"]
+    assert [e["event"] for e in events] == ["enqueued", "first_approval", "approved", "executing", "executed"]
     assert all(e["item_id"] == a.id for e in events)

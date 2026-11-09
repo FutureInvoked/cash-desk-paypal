@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from . import __version__
@@ -70,6 +70,12 @@ def create_app(desk=None) -> FastAPI:
     @app.post("/api/approvals/{item_id}/execute")
     def execute(item_id: str) -> dict:
         return guarded(d().execute, item_id)
+
+    @app.get("/api/export/journal.csv")
+    def journal_csv() -> Response:
+        desk = d()
+        return Response(desk.journal_csv(), media_type="text/csv; charset=utf-8", headers={
+            "Content-Disposition": f'attachment; filename="cashdesk-journal-{desk.as_of.isoformat()}.csv"'})
 
     @app.get("/api/audit")
     def audit() -> dict:

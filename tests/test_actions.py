@@ -33,8 +33,9 @@ def by(props, type_, target):
     return [p for p in props if p.type == type_ and p.target == target]
 
 
-def test_action_types_are_exactly_the_four_allowed():
-    assert ACTION_TYPES == {"send_reminder", "create_draft_invoice", "record_payment", "refund_capture"}
+def test_action_types_are_exactly_the_five_allowed():
+    assert ACTION_TYPES == {"send_reminder", "create_draft_invoice", "record_payment", "refund_capture",
+                            "refund_overpayment"}
 
 
 def test_every_oracle_proposed_action_is_proposed(setup):
@@ -57,6 +58,7 @@ def test_full_proposal_set(setup):
         ("create_draft_invoice", txn_id("unbilled-ella")),
         ("record_payment", "NW-1021"),
         ("refund_capture", "NW-1015"),
+        ("refund_overpayment", "NW-1014"),
     ])
 
 

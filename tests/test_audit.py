@@ -136,10 +136,12 @@ def test_queue_events_land_in_the_audit_log(tmp_path):
     q = ApprovalQueue(tmp_path / "q.db", on_event=audit.append)
     item = q.enqueue(p)
     q.approve(item.id, by="owner")
+    q.approve(item.id, by="bookkeeper")  # 800.00 refund: second approver
     q.execute(item.id, c)
     recs = [json.loads(x) for x in lines(audit.path)]
-    assert [x["event"] for x in recs] == ["enqueued", "approved", "executing", "executed"]
-    assert recs[2]["request_id"] == f"cashdesk-{item.id}" and recs[2]["api_calls"][0]["path"].endswith("/refund")
+    assert [x["event"] for x in recs] == ["enqueued", "first_approval", "approved", "executing", "executed"]
+    assert recs[1]["by"] == "owner" and recs[2]["by"] == "bookkeeper"
+    assert recs[3]["request_id"] == f"cashdesk-{item.id}" and recs[3]["api_calls"][0]["path"].endswith("/refund")
     assert verify(audit.path).ok
 
 

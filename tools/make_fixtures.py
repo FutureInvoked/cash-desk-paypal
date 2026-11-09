@@ -385,6 +385,7 @@ def cases() -> dict:
             "description": "495.00 received for a 450.00 invoice (rush tip in the note).",
             "invoices": ["NW-1014"], "transactions": [T("NW-1014")],
             "expected": {T("NW-1014"): "overpaid"},
+            "proposed_action": {"type": "refund_overpayment", "transaction": T("NW-1014")},
         },
         "duplicate_payment": {
             "description": "Double checkout: two 800.00 captures 98 seconds apart for one invoice. "

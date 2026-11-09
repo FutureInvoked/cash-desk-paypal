@@ -52,12 +52,12 @@ def test_reconciliation_returns_results_reasons_and_summary(api):
 
 def test_refresh_proposals_enqueues_new_ones_once(api):
     first = api.post("/api/proposals/refresh").json()
-    assert first["enqueued"] == 6 and first["skipped"] == 0
+    assert first["enqueued"] == 7 and first["skipped"] == 0
     again = api.post("/api/proposals/refresh").json()
-    assert again["enqueued"] == 0 and again["skipped"] == 6
+    assert again["enqueued"] == 0 and again["skipped"] == 7
     items = api.get("/api/approvals").json()["items"]
-    assert len(items) == 6 and {i["status"] for i in items} == {"pending"}
-    assert api.get("/api/reconciliation").json()["summary"]["pending_actions"] == 6
+    assert len(items) == 7 and {i["status"] for i in items} == {"pending"}
+    assert api.get("/api/reconciliation").json()["summary"]["pending_actions"] == 7
 
 
 def test_approvals_show_the_exact_api_call_and_policy(api):
@@ -75,6 +75,8 @@ def test_approve_then_execute(api, desk):
     api.post("/api/proposals/refresh")
     item = next(i for i in api.get("/api/approvals").json()["items"] if i["proposal"]["type"] == "refund_capture")
     r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner"})
+    assert r.status_code == 200 and r.json()["status"] == "awaiting_second"  # 800.00 refund: two people
+    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "bookkeeper"})
     assert r.status_code == 200 and r.json()["status"] == "approved"
     r = api.post(f"/api/approvals/{item['id']}/execute")
     assert r.status_code == 200 and r.json()["status"] == "executed"
@@ -122,7 +124,7 @@ def test_audit_endpoint_returns_records_and_verification(api):
     item = api.get("/api/approvals").json()["items"][0]
     api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner"})
     body = api.get("/api/audit").json()
-    assert body["verify"]["ok"] is True and body["verify"]["count"] == 7
+    assert body["verify"]["ok"] is True and body["verify"]["count"] == 8
     assert body["verify"]["head_hash"] == body["records"][-1]["hash"]
     assert [r["event"] for r in body["records"]][-1] == "approved"
 
