@@ -75,6 +75,22 @@ def _read_lines(path: Path) -> list[str]:
     return text.split("\n")
 
 
+def _snapshot(path: Path) -> tuple[str, tuple[bool, dict | None]]:
+    """The log's text and its head pointer, read under ONE shared lock. An append holds the exclusive
+    lock from announcing a record in the head until the head sits on it, so reading the head after
+    letting go of the lock could pair old text with a newer head and fail a sound log."""
+    head_file = _head_path(path)
+    with open(path, "r") as f:
+        fcntl.flock(f, fcntl.LOCK_SH)
+        try:
+            text = f.read()
+            exists = head_file.exists()
+            head = _read_head(head_file) if exists else None
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+    return text, (exists, head)
+
+
 def _read_head(head_file: Path) -> dict | None:
     try:
         head = json.loads(head_file.read_text())
@@ -99,7 +115,8 @@ def verify(path: Path | str | None = None) -> VerifyResult:
         if head_file.exists():
             return VerifyResult(False, 0, error="log missing but head pointer exists")
         return VerifyResult(True, 0)
-    return _verify_text("\n".join(_read_lines(path)), head_file)
+    text, head = _snapshot(path)
+    return _verify_state(text, head_file, head_snapshot=head)[0]
 
 
 @dataclass
@@ -109,14 +126,12 @@ class _Chain:
     prev_before: str | None = None
 
 
-def _verify_text(text: str, head_file: Path, start: _Chain | None = None, offset_line: int = 0) -> VerifyResult:
-    res, _ = _verify_state(text, head_file, start)
-    return res
-
-
-def _verify_state(text: str, head_file: Path, start: _Chain | None = None) -> tuple[VerifyResult, dict]:
+def _verify_state(text: str, head_file: Path, start: _Chain | None = None, *,
+                  head_snapshot: tuple[bool, dict | None] | None = None) -> tuple[VerifyResult, dict]:
     """`start`: the chain state the text continues from (an append that already verified the start
-    of the file reads only what was added since). Returns the result and what a repair would do."""
+    of the file reads only what was added since). `head_snapshot`: (exists, head) read under the same
+    lock as `text`; without it the head file is read now (callers holding the exclusive lock).
+    Returns the result and what a repair would do."""
     ch = _Chain(**vars(start)) if start else _Chain()
     pieces = text.split("\n")
     lines, tail = pieces[:-1], pieces[-1]
@@ -140,8 +155,11 @@ def _verify_state(text: str, head_file: Path, start: _Chain | None = None) -> tu
         err = check(ch.count + 1, line)
         if err:
             return VerifyResult(False, ch.count, first_bad_seq=ch.count + 1, error=err), fix
-    head = _read_head(head_file) if head_file.exists() else None
-    if head_file.exists() and head is None:
+    if head_snapshot is None:
+        exists = head_file.exists()
+        head_snapshot = (exists, _read_head(head_file) if exists else None)
+    head_exists, head = head_snapshot
+    if head_exists and head is None:
         return VerifyResult(False, ch.count, head_hash=ch.prev, error="head pointer is unreadable"), fix
     in_flight = (head or {}).get("next")
     if tail:
