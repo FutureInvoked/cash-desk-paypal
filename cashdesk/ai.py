@@ -110,7 +110,7 @@ def build_payload(result: MatchResult, invoices: list[Invoice], txns: list[Trans
                          "transaction_info.transaction_initiation_date": t.initiated.isoformat()},
             "candidate_invoices": [_inv_brief(i, inv_r.get(i.number)) for i in candidates(result, invoices, t)],
         })
-    results = [{"id": r.txn_id, "kind": "transaction", "outcome": r.outcome, "invoice_number": r.invoice_number,
+    results = [{"id": row_id(r), "kind": "transaction", "outcome": r.outcome, "invoice_number": r.invoice_number,
                 "difference": str(r.difference) if r.difference else None, "evidence": r.evidence}
                for r in result.transactions]
     results += [{"id": r.invoice_number, "kind": "invoice", "outcome": r.outcome, "status": r.status,
@@ -122,6 +122,26 @@ def build_payload(result: MatchResult, invoices: list[Invoice], txns: list[Trans
                               "days_overdue": r.days_overdue}}
                 for r in result.invoices]
     return {"unmatched_payments": unmatched, "results": results}
+
+
+def row_id(r: TxnResult) -> str:
+    """Transaction ids repeat across event codes in PayPal reporting; a reason belongs to one row."""
+    return f"{r.txn_id}:{r.event_code}"
+
+
+_LONG_TOKEN = re.compile(r"[A-Za-z0-9+/=_.\-]{24,}")
+
+
+def foreign_data(text: str, payload_text: str) -> bool:
+    """True when AI text carries data the evidence doesn't contain: a key block, or a long token
+    (key, token, blob) that appears nowhere in what the model was shown."""
+    if "-----BEGIN" in text or "PRIVATE KEY" in text:
+        return True
+    for tok in _LONG_TOKEN.findall(text):
+        tok = tok.rstrip(".,;:-_=/")  # end of a sentence, not part of the data
+        if len(tok) >= 24 and tok not in payload_text:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------- reconcilers
@@ -215,26 +235,46 @@ def fallback_suggestions(result, invoices, txns, status: str) -> Suggestions:
 
 def validate(out, result, invoices, txns, payload, model: str) -> Suggestions:
     """Keep only what the evidence backs: candidate invoices, same currency (via candidates),
-    confidence >= MIN_CONFIDENCE, and reasons whose cited fields exist."""
+    confidence >= MIN_CONFIDENCE, reasons whose cited fields exist on that exact row, and no text
+    carrying data the model wasn't shown."""
+    payload_text = json.dumps(payload, default=str)
     by_txn = {t.id: t for t in _unmatched(result, txns)}
     links: dict[str, Link] = {}
-    for res in out.get("resolutions", []):
+    for res in out.get("resolutions", []) or []:
+        if not isinstance(res, dict):
+            continue
         t = by_txn.get(res.get("transaction_id"))
         num = res.get("invoice_number")
-        conf = float(res.get("confidence") or 0)
+        try:
+            conf = float(res.get("confidence") or 0)
+        except (TypeError, ValueError):
+            continue
         if not t or not num or conf < MIN_CONFIDENCE:
             continue
         if num not in {i.number for i in candidates(result, invoices, t)}:
             continue  # the AI may only pick from the candidates it was shown
-        ev = {"ai.reason": str(res.get("reason", ""))[:300]}
-        ev.update({f: payload_value(payload, t.id, f) for f in res.get("cited_fields", [])
-                   if payload_value(payload, t.id, f) is not None})
+        why = str(res.get("reason", ""))[:300]
+        if foreign_data(why, payload_text):
+            continue  # a link that smuggles data out is not trusted at all
+        ev = {"ai.reason": why}
+        ev.update({f: payload_value(payload, t.id, f) for f in res.get("cited_fields", []) or []
+                   if isinstance(f, str) and payload_value(payload, t.id, f) is not None})
         links[t.id] = Link(num, "ai", "ai", conf, ev)
     evidence_keys = {r["id"]: set(r["evidence"]) for r in payload["results"]}
+    # a plain transaction id is accepted only when exactly one row has it
+    plain: dict[str, list[str]] = {}
+    for r in payload["results"]:
+        if r["kind"] == "transaction":
+            plain.setdefault(r["id"].rsplit(":", 1)[0], []).append(r["id"])
     reasons = {}
-    for r in out.get("reasons", []):
-        rid, text, cited = r.get("id"), _one_line(r.get("reason", "")), r.get("cited_fields", [])
-        if rid in evidence_keys and text and cited and set(cited) <= evidence_keys[rid]:
+    for r in out.get("reasons", []) or []:
+        if not isinstance(r, dict):
+            continue
+        rid, text, cited = r.get("id"), _one_line(str(r.get("reason", ""))), r.get("cited_fields", [])
+        if rid not in evidence_keys and len(plain.get(rid, [])) == 1:
+            rid = plain[rid][0]
+        if (rid in evidence_keys and text and isinstance(cited, list) and cited
+                and set(cited) <= evidence_keys[rid] and not foreign_data(text, payload_text)):
             reasons[rid] = text
     return Suggestions(links, reasons, f"ai ({model})")
 
@@ -283,12 +323,19 @@ class OpenAICompatibleReconciler:
             choice = resp.json()["choices"][0]
         except (ValueError, KeyError, IndexError, TypeError):
             return fb("invalid AI output")
+        if not isinstance(choice, dict) or not isinstance(choice.get("message") or {}, dict):
+            return fb("invalid AI output")
         msg = choice.get("message") or {}
         if msg.get("refusal"):
             return fb("model declined")
         if choice.get("finish_reason") == "length":
             return fb("output truncated")
-        text = (msg.get("content") or "").strip()
+        content = msg.get("content")
+        if isinstance(content, list):  # content parts: join the text ones
+            content = "".join(p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") in ("text", "output_text"))
+        if not isinstance(content, str):
+            return fb("invalid AI output")
+        text = content.strip()
         fence = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.S)
         if fence:
             text = fence.group(1)
@@ -299,6 +346,13 @@ class OpenAICompatibleReconciler:
         if not isinstance(out, dict):
             return fb("invalid AI output")
         return validate(out, result, invoices, txns, payload, self.model)
+
+
+# Codex features that would let the model read files, run commands, browse or reach other apps.
+# Payer-written notes are in the prompt, so the model gets no tools at all: it only answers in JSON.
+CODEX_TOOLS_OFF = ("shell_tool", "unified_exec", "apps", "plugins", "browser_use", "browser_use_external",
+                   "computer_use", "in_app_browser", "view_image", "hooks", "code_mode_host", "skill_search",
+                   "tool_suggest")
 
 
 class CodexReconciler:
@@ -330,6 +384,7 @@ class CodexReconciler:
             schema.write_text(json.dumps(OUTPUT_SCHEMA))
             args = [self.codex_bin, "exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only",
                     "-C", tmp, "-m", self.model, "-c", 'model_reasoning_effort="low"', "-c", "mcp_servers={}",
+                    *[x for f in CODEX_TOOLS_OFF for x in ("--disable", f)],
                     "--output-schema", str(schema), "-o", str(out), "-"]
             try:
                 proc = self.runner(args, input=prompt, timeout=self.timeout, capture_output=True, text=True, cwd=tmp)
@@ -440,6 +495,9 @@ def txn_reason(r: TxnResult, txns: dict[str, Transaction]) -> str:
     if r.outcome == "partial":
         return (f"Partial payment on {n}: transaction_info.transaction_amount {amt} received, "
                 f"{-r.difference.amount:.2f} {r.difference.currency} still due ({_first_ref(ev)}).")
+    if r.outcome == "overpaid" and "refunded_amount" in ev:
+        return (f"Overpaid {n} by {ev.get('overpaid_by')}; {ev['refunded_amount']} already refunded, "
+                f"{r.difference} left to refund or credit.")
     if r.outcome == "overpaid":
         return f"Overpaid {n} by {r.difference}: {_first_ref(ev)}; offer a refund or credit."
     if r.outcome == "duplicate":
@@ -453,8 +511,15 @@ def txn_reason(r: TxnResult, txns: dict[str, Transaction]) -> str:
     if r.outcome == "refunded" and r.duplicate_of:
         return (f"Duplicate of {r.duplicate_of} for {n}, already refunded "
                 f"(transaction_info.paypal_reference_id on {ev.get('refunded_by.transaction_id')}).")
+    if r.outcome == "refunded" and ev.get("refunded_by.transaction_id"):
+        return (f"Paid {n}, then fully refunded "
+                f"(transaction_info.paypal_reference_id on {ev['refunded_by.transaction_id']}).")
     if r.outcome == "refunded":
         return f"Paid {n}, then fully refunded (transaction_info.transaction_status V)."
+    if r.outcome == "partial" and "refunded_amount" in ev:
+        return (f"Paid {n}, then {ev['refunded_amount']} refunded "
+                f"(transaction_info.paypal_reference_id on {ev.get('refunded_by.transaction_id')}); "
+                f"{-r.difference.amount:.2f} {r.difference.currency} still due.")
     if r.outcome == "refund":
         return f"Refund row for {n} pointing at transaction_info.paypal_reference_id {ev.get('transaction_info.paypal_reference_id')}."
     if r.outcome == "pending":
@@ -501,8 +566,8 @@ def reconcile(invoices: list[Invoice], txns: list[Transaction], *, as_of: date, 
     final = match(invoices, txns, as_of=as_of, links=sug.links) if sug.links else first
     by_id = {t.id: t for t in txns}
     for r in final.transactions:
-        if r.txn_id in sug.reasons and r.outcome == first.txn(r.txn_id, r.event_code).outcome:
-            r.reason, r.reason_source = sug.reasons[r.txn_id], "ai"
+        if row_id(r) in sug.reasons and r.outcome == first.txn(r.txn_id, r.event_code).outcome:
+            r.reason, r.reason_source = sug.reasons[row_id(r)], "ai"
         else:
             r.reason, r.reason_source = txn_reason(r, by_id), "rules"
     for r in final.invoices:

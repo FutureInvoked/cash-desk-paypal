@@ -273,3 +273,70 @@ def test_codex_failures_fall_back_to_rules(kind):
            "missing_binary": FakeRun(exc=FileNotFoundError("codex"))}[kind]
     res = reconcile(invs, txns, as_of=AS_OF, reconciler=CodexReconciler(codex_bin="/bin/codex", runner=run))
     assert res.ai_status.startswith("fallback") and res.txn(LUMEN).resolved_by == "fallback"
+
+
+# ---------- review findings #3, #8, #9 ----------
+
+def test_codex_runs_with_its_file_and_shell_tools_switched_off():
+    invs, txns = data()
+    run = FakeRun({"resolutions": [], "reasons": []})
+    reconcile(invs, txns, as_of=AS_OF, reconciler=CodexReconciler(codex_bin="/bin/codex", runner=run))
+    a = run.calls[0]["args"]
+    off = {a[i + 1] for i, x in enumerate(a) if x == "--disable"}
+    assert {"shell_tool", "unified_exec", "apps", "plugins", "browser_use", "computer_use", "in_app_browser",
+            "view_image"} <= off
+
+
+def test_ai_reason_carrying_data_that_is_not_in_the_evidence_is_rejected():
+    invs, txns = data()
+    secret = "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAAB"
+    tid = txn_id("NW-1001")
+    p = {"resolutions": [], "reasons": [
+        {"id": tid, "reason": f"Matched; key {secret}", "cited_fields": ["transaction_info.transaction_id"]},
+        {"id": txn_id("NW-1002"), "reason": f"Matched to NW-1002 by transaction_info.transaction_id {txn_id('NW-1002')}.",
+         "cited_fields": ["transaction_info.transaction_id"]}]}
+    client, _ = mocked(chat_reply(json.dumps(p)))
+    r = reconcile(invs, txns, as_of=AS_OF, reconciler=rec(client))
+    assert r.txn(tid).reason_source == "rules" and secret not in r.txn(tid).reason
+    assert r.txn(txn_id("NW-1002")).reason_source == "ai"  # ids that are in the data are fine
+
+
+def test_ai_resolution_reason_carrying_foreign_data_is_dropped():
+    invs, txns = data()
+    bad = good_payload([])
+    header = "-" * 5 + "BEGIN OPENSSH " + "PRIVATE KEY" + "-" * 5  # split so the repo's secret scan stays clean
+    bad["resolutions"][0]["reason"] = header + " b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ"
+    client, _ = mocked(chat_reply(json.dumps(bad)))
+    t = reconcile(invs, txns, as_of=AS_OF, reconciler=rec(client)).txn(LUMEN)
+    assert "BEGIN" not in t.reason and "b3BlbnNz" not in t.reason
+
+
+def test_reasons_go_to_the_exact_row_when_ids_repeat_across_event_codes():
+    import dataclasses
+    invs, txns = data()
+    tid = txn_id("NW-1001")
+    pay = next(t for t in txns if t.id == tid)
+    conv = dataclasses.replace(pay, event_code="T0200", amount=-pay.amount, fee=None, invoice_ref=None,
+                               paypal_invoice_id=None)
+    txns = txns + [conv]
+    p = {"resolutions": [], "reasons": [
+        {"id": tid, "reason": "Plain id: ambiguous between two rows.", "cited_fields": ["transaction_info.transaction_id"]},
+        {"id": f"{tid}:T0006", "reason": "Row-specific reason for the payment.", "cited_fields": ["transaction_info.transaction_id"]}]}
+    client, calls = mocked(chat_reply(json.dumps(p)))
+    r = reconcile(invs, txns, as_of=AS_OF, reconciler=rec(client))
+    assert f"{tid}:T0006" in calls[0].content.decode() and f"{tid}:T0200" in calls[0].content.decode()
+    assert r.txn(tid, "T0006").reason == "Row-specific reason for the payment."
+    assert r.txn(tid, "T0200").reason_source == "rules"
+
+
+@pytest.mark.parametrize("reply", [
+    {"choices": [{"message": {"content": [{"type": "text", "text": json.dumps({"resolutions": [], "reasons": []})}]}}]},
+    {"choices": ["not a dict"]},
+    {"choices": [{"message": "not a dict"}]},
+    {"choices": [{"message": {"content": 42}}]},
+])
+def test_unusual_response_shapes_never_crash(reply):
+    invs, txns = data()
+    client, _ = mocked(reply)
+    r = reconcile(invs, txns, as_of=AS_OF, reconciler=rec(client))
+    assert r.ai_status.startswith(("ai (", "fallback"))

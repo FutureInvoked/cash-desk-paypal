@@ -104,7 +104,8 @@ The AI layer is in `cashdesk/ai.py`, with the prompt in `cashdesk/prompts/reconc
   - **An OpenAI model through the Codex CLI, signed in with a ChatGPT plan** (no API key):
     `AI_PROVIDER=codex`, optionally `AI_MODEL` (default `gpt-6-sol`) and `CODEX_BIN`. One
     `codex exec` per reconciliation, in a read-only sandbox inside an empty temporary folder, with
-    `--output-schema` forcing the same JSON. Run `codex login` once to sign in.
+    every Codex tool switched off (shell, file viewing, browser, apps, plugins), so text a payer wrote
+    can't make it read your files. `--output-schema` forces the same JSON. Run `codex login` once.
   - All of them go through the same prompt, schema and guard rails below.
   - Checked with a real hosted model on 2026-11-09: `gpt-6-sol` through Codex scored 31/31 on
     `make eval` (74 s), resolved the Lumen Bakery memo case at 0.99 confidence, and every payment
@@ -123,7 +124,8 @@ The AI layer is in `cashdesk/ai.py`, with the prompt in `cashdesk/prompts/reconc
   - A link is kept only if the invoice was one of the candidates, the currency matches and the
     confidence is at least 0.6. It then goes back through the deterministic matcher.
   - Suggested matches are marked "needs review".
-  - A reason is kept only if every field it cites exists in the evidence.
+  - A reason is kept only if every field it cites exists in the evidence of that exact row, and it
+    is dropped if it carries data the model was never shown (a key block or a long unknown token).
   - Text written by payers (notes, subjects) is passed to the model as untrusted data.
   - The AI layer has no path to any PayPal write.
 - **No key? It still works.** With no AI provider set, or on an API error, a refusal or
@@ -172,8 +174,10 @@ Transaction Search, which runs about 2 hours behind, so webhooks don't remove th
 - **A separate server** (`make webhooks`, port 8001) serves only `POST /webhooks/paypal` and
   `GET /webhooks/health`. Point a tunnel or reverse proxy at this port, never at the board.
 - **Every event is verified with PayPal** (`POST /v1/notifications/verify-webhook-signature`, with
-  the raw body passed through unchanged). Unverified events are rejected and audited. Without
-  `PAYPAL_WEBHOOK_ID` in `.env`, nothing is accepted.
+  the raw body passed through unchanged). Unverified events are rejected and audited; after 20 in
+  10 minutes the server answers 429 without asking PayPal. Bodies are capped at 256 KB while they
+  stream in, and the PayPal calls run off the event loop. Without `PAYPAL_WEBHOOK_ID` in `.env`,
+  nothing is accepted.
 - **An event only triggers a re-sync.** Amounts and matches always come from PayPal's APIs, never
   from the event body, and an event can't propose, approve or run an action. Repeated event ids are
   ignored. Each event lands in the audit log (`webhook_received` / `webhook_rejected`).

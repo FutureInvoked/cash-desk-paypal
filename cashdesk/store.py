@@ -137,6 +137,11 @@ class Store:
                             (txn_id,)).fetchone()
         return parse_transaction(json.loads(r["raw"])) if r else None
 
+    def last_sync(self) -> dict | None:
+        with self._conn() as con:
+            r = con.execute("select * from sync_runs order by id desc limit 1").fetchone()
+        return dict(r) if r else None
+
     def sync_runs(self) -> list[dict]:
         with self._conn() as con:
             return [dict(r) for r in con.execute("select * from sync_runs order by id")]

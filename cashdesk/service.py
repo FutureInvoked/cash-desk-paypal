@@ -68,13 +68,13 @@ class Desk:
         return res
 
     def result(self) -> MatchResult:
-        runs = self.store.sync_runs()
-        if not runs:
+        last = self.store.last_sync()
+        if last is None:
             self.sync()
-            runs = self.store.sync_runs()
-        if runs[-1]["id"] != self._result_run:  # another process (the webhook server) synced
+            last = self.store.last_sync()
+        if last["id"] != self._result_run:  # another process (the webhook server) synced
             self._result = None
-            self._result_run = runs[-1]["id"]
+            self._result_run = last["id"]
         if self._result is None:
             self._result = reconcile(self.store.invoices(), self.store.transactions(), as_of=self.as_of,
                                      reconciler=self.reconciler)
@@ -107,9 +107,9 @@ class Desk:
                 "days_overdue": x.days_overdue, "transactions": x.transactions, "reason": x.reason,
                 "reason_source": x.reason_source,
             })
-        runs = self.store.sync_runs()
+        last = self.store.last_sync()
         return {"as_of": self.as_of.isoformat(), "mode": self.client.mode, "ai_status": r.ai_status,
-                "last_sync": runs[-1]["at"] if runs else None, "transactions": rows, "invoices": inv_rows,
+                "last_sync": last["at"] if last else None, "transactions": rows, "invoices": inv_rows,
                 "summary": self.summary(r, txns)}
 
     def summary(self, r: MatchResult, txns) -> dict:

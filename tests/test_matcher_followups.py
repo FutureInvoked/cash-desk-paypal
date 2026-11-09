@@ -149,3 +149,65 @@ def test_summary_no_longer_counts_refunded_duplicates_as_unreconciled(tmp_path, 
     s = Desk(client=C(), reconciler=FallbackReconciler(), clock=lambda: T0).reconciliation()["summary"]
     # before: 1,124.00 USD unreconciled (two unbilled payments 275 + 49 and the 800 duplicate)
     assert s["unreconciled"]["USD"] == "324.00"
+
+
+# ---------- review findings #1 and #5: refunds other than "exactly the excess" ----------
+
+NW1001 = txn_id("NW-1001")
+
+
+def test_refund_larger_than_the_excess_leaves_the_invoice_partly_unpaid():
+    invs, txns = data()
+    txns.append(refund_of(txns, OVER, "300.00", "REFUNDOVER000003"))
+    r, props, lines = run(invs, txns)
+    t = r.txn(OVER)
+    assert t.outcome == "partial" and t.evidence["refunded_amount"] == "300.00 USD"
+    inv = r.invoice_by_number("NW-1014")
+    assert inv.outcome == "partial" and inv.received == Money(Decimal("195.00"), "USD")
+    assert inv.outstanding == Money(Decimal("255.00"), "USD")
+    # books: the payment split stays (AR 450 + credits 45); the refund takes the 45 credit first, then 255 of AR
+    assert lines_for(lines, OVER)[ACCOUNTS["credits"]] == ("0", "45.00")
+    ref = lines_for(lines, "REFUNDOVER000003")
+    assert ref[ACCOUNTS["credits"]] == ("45.00", "0") and ref[ACCOUNTS["receivable"]] == ("255.00", "0")
+
+
+def test_full_refund_of_an_overpayment_refunds_the_invoice():
+    invs, txns = data()
+    txns.append(refund_of(txns, OVER, "495.00", "REFUNDOVER000004"))
+    r, _, lines = run(invs, txns)
+    assert r.txn(OVER).outcome == "refunded"
+    inv = r.invoice_by_number("NW-1014")
+    assert inv.outcome == "refunded" and inv.received == Money(Decimal("0.00"), "USD")
+    ref = lines_for(lines, "REFUNDOVER000004")
+    assert ref[ACCOUNTS["credits"]] == ("45.00", "0") and ref[ACCOUNTS["receivable"]] == ("450.00", "0")
+
+
+def test_small_refund_on_an_overpayment_keeps_the_rest_of_the_excess():
+    invs, txns = data()
+    txns.append(refund_of(txns, OVER, "20.00", "REFUNDOVER000005"))
+    r, props, _ = run(invs, txns)
+    t = r.txn(OVER)
+    assert t.outcome == "overpaid" and t.evidence["refunded_amount"] == "20.00 USD"
+    assert r.invoice_by_number("NW-1014").received == Money(Decimal("475.00"), "USD")
+    # the overpayment refund proposal now offers only what is left
+    (p,) = [p for p in props if p.type == "refund_overpayment"]
+    assert p.amount == Money(Decimal("25.00"), "USD")
+
+
+def test_partial_refund_of_a_normal_payment_reopens_the_invoice():
+    invs, txns = data()
+    txns.append(refund_of(txns, NW1001, "400.00", "REFUND1001000001"))
+    r, _, lines = run(invs, txns)
+    t = r.txn(NW1001)
+    assert t.outcome == "partial" and t.evidence["refunded_amount"] == "400.00 USD"
+    inv = r.invoice_by_number("NW-1001")
+    assert inv.outcome in ("partial", "overdue") and inv.outstanding == Money(Decimal("400.00"), "USD")
+    assert lines_for(lines, "REFUND1001000001")[ACCOUNTS["receivable"]] == ("400.00", "0")
+
+
+def test_full_refund_of_a_normal_payment_marks_both_refunded():
+    invs, txns = data()
+    txns.append(refund_of(txns, NW1001, "1250.00", "REFUND1001000002"))
+    r, _, _ = run(invs, txns)
+    assert r.txn(NW1001).outcome == "refunded"
+    assert r.invoice_by_number("NW-1001").outcome == "refunded"

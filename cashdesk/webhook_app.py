@@ -10,6 +10,7 @@ import os
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from . import __version__
 from .webhooks import MAX_BODY, handle
@@ -27,10 +28,16 @@ def create_webhook_app(desk=None) -> FastAPI:
 
     @app.post("/webhooks/paypal")
     async def paypal(request: Request) -> JSONResponse:
-        length = int(request.headers.get("content-length") or 0)
-        if length > MAX_BODY:
+        # read at most MAX_BODY + 1 bytes, whatever Content-Length says (chunked bodies have none)
+        if int(request.headers.get("content-length") or 0) > MAX_BODY:
             return JSONResponse({"status": "rejected", "error": "body too large"}, status_code=413)
-        status, body = handle(d(), await request.body(), request.headers)
+        buf = bytearray()
+        async for chunk in request.stream():
+            buf += chunk
+            if len(buf) > MAX_BODY:
+                return JSONResponse({"status": "rejected", "error": "body too large"}, status_code=413)
+        # PayPal verify and the re-sync are blocking network calls: keep them off the event loop
+        status, body = await run_in_threadpool(handle, d(), bytes(buf), dict(request.headers))
         return JSONResponse(body, status_code=status)
 
     @app.get("/webhooks/health")

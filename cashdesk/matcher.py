@@ -312,6 +312,7 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
                     else "partial"
             else:
                 r.outcome = "overpaid"
+                r.evidence["overpaid_by"] = str(r.difference)
 
     # ---- refunds that point back at a payment (transaction_info.paypal_reference_id) ----
     refunded_amt: dict[str, Decimal] = {}
@@ -320,26 +321,47 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
         if t.event_code in REFUND_CODES and t.status == "S" and t.reference_id:
             refunded_amt[t.reference_id] = refunded_amt.get(t.reference_id, Decimal("0")) + abs(t.amount.amount)
             refund_ids.setdefault(t.reference_id, []).append(t.id)
-    excess_refunded: dict[str, Decimal] = {}
+    # what each payment still counts for after refunds, and invoices whose payments were all refunded
+    net_less: dict[str, Decimal] = {}
+    refunded_invoice: set[str] = set()
     for t in txns:
         r = results.get(t.key)
         back = refunded_amt.get(t.id)
-        if r is None or not back:
+        if r is None or not back or r.outcome not in ("matched", "partial", "fee_mismatch", "overpaid", "duplicate"):
             continue
-        if r.outcome == "duplicate" and back >= t.amount.amount:
+        back = min(back, t.amount.amount)
+        ccy = t.amount.currency
+        r.evidence["refunded_by.transaction_id"] = refund_ids[t.id][-1]
+        if r.outcome == "duplicate":  # a duplicate never counts toward the invoice
+            if back >= t.amount.amount:
+                r.outcome = "refunded"
+            else:
+                r.evidence["refunded_amount"] = str(Money(back, ccy))
+            continue
+        excess = r.difference.amount if r.outcome == "overpaid" and r.difference else Decimal("0")
+        net_less[t.id] = back
+        if back >= t.amount.amount:
             r.outcome = "refunded"
-            r.evidence["refunded_by.transaction_id"] = refund_ids[t.id][-1]
-        elif r.outcome == "overpaid" and r.difference is not None and back >= r.difference.amount:
-            excess_refunded[t.id] = r.difference.amount
-            r.evidence["refunded_excess"] = str(r.difference)
-            r.evidence["refunded_by.transaction_id"] = refund_ids[t.id][-1]
+            if r.invoice_id:
+                refunded_invoice.add(r.invoice_id)
+        elif excess and back == excess:
             r.outcome = "matched"
+            r.evidence["refunded_excess"] = str(r.difference)
+            r.difference = Money(Decimal("0"), ccy)
+        else:
+            r.evidence["refunded_amount"] = str(Money(back, ccy))
+            if r.difference is not None:
+                r.difference = Money(r.difference.amount - back, ccy)
+            if excess and back < excess:
+                pass  # still overpaid, by what is left of the excess
+            else:
+                r.outcome = "partial"
 
     # ---- invoices ----
     inv_results: list[InvoiceResult] = []
     for inv in sorted(invoices, key=lambda i: i.number):
         pays = [(t, r) for t, r in applied.get(inv.id, []) if r.outcome not in ("duplicate", "refunded")]
-        received = Money(sum((t.amount.amount - excess_refunded.get(t.id, Decimal("0")) for t, _ in pays),
+        received = Money(sum((t.amount.amount - net_less.get(t.id, Decimal("0")) for t, _ in pays),
                              Decimal("0")), inv.total.currency)
         outstanding = Money(max(inv.total.amount - received.amount, Decimal("0")), inv.total.currency)
         days = (as_of - inv.due_date).days if inv.due_date else 0
@@ -347,7 +369,8 @@ def match(invoices: list[Invoice], transactions: list[Transaction], *, as_of: da
             outcome = "draft"
         elif inv.status in {"CANCELLED", "AUTO_CANCELLED"}:
             outcome = "cancelled"
-        elif refunded_for.get(inv.id) or inv.status in {"REFUNDED", "MARKED_AS_REFUNDED"}:
+        elif refunded_for.get(inv.id) or inv.status in {"REFUNDED", "MARKED_AS_REFUNDED"} \
+                or (inv.id in refunded_invoice and not pays):
             outcome = "refunded"
         elif pays and received.amount > inv.total.amount:
             outcome = "overpaid"

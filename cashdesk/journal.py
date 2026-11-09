@@ -46,12 +46,18 @@ def journal(result: MatchResult, txns: list[Transaction]) -> list[dict]:
     by_id: dict[tuple[str, str], Transaction] = {}
     for t in txns:  # transaction ids repeat across event codes; one row per (id, event code) is enough
         by_id.setdefault((t.id, t.event_code), t)
-    outcome_of = {}
+    # how much of each payment went to customer credits (a duplicate in full, an overpayment its excess);
+    # refunds of that payment take from those credits first, then from receivables
+    credit_left: dict[str, Decimal] = {}
     for r in result.transactions:
         if r.outcome in PAYMENT_OUTCOMES:
-            # a refunded duplicate or a refunded overpayment excess was booked to customer credits
-            outcome_of[r.txn_id] = ("duplicate" if r.duplicate_of
-                                    else "overpaid" if "refunded_excess" in r.evidence else r.outcome)
+            t0 = by_id.get((r.txn_id, r.event_code))
+            if t0 is None:
+                continue
+            if r.duplicate_of:
+                credit_left[r.txn_id] = t0.amount.amount
+            elif "overpaid_by" in r.evidence:
+                credit_left[r.txn_id] = Decimal(r.evidence["overpaid_by"].split()[0])
     lines: list[dict] = []
 
     for r in result.transactions:
@@ -75,13 +81,12 @@ def journal(result: MatchResult, txns: list[Transaction]) -> list[dict]:
             line("paypal", debit=gross - fee, memo=f"PayPal payment {t.id}, net of fee")
             line("fees", debit=fee, memo="PayPal fee")
             n = r.invoice_number
-            refunded_excess = Decimal(r.evidence["refunded_excess"].split()[0]) if "refunded_excess" in r.evidence else None
-            if refunded_excess or (r.outcome == "overpaid" and r.difference and r.difference.amount > 0):
-                excess = refunded_excess or r.difference.amount
+            if r.duplicate_of:
+                line("credits", credit=gross, memo=f"Duplicate payment for {n} (of {r.duplicate_of}); refund candidate")
+            elif "overpaid_by" in r.evidence:
+                excess = Decimal(r.evidence["overpaid_by"].split()[0])
                 line("receivable", credit=gross - excess, memo=f"Payment for {n}")
                 line("credits", credit=excess, memo=f"Overpaid {n} by {_fmt(excess)}; refund or credit")
-            elif r.outcome == "duplicate" or (r.outcome == "refunded" and r.duplicate_of):
-                line("credits", credit=gross, memo=f"Duplicate payment for {n} (of {r.duplicate_of}); refund candidate")
             elif r.outcome in ("unmatched", "currency_mismatch"):
                 why = "no invoice found" if r.outcome == "unmatched" else f"names {n} but paid in {ccy}"
                 line("unapplied", credit=gross, memo=f"Unapplied payment: {why}")
@@ -98,10 +103,12 @@ def journal(result: MatchResult, txns: list[Transaction]) -> list[dict]:
         elif r.outcome == "refund":
             amount = -t.amount.amount if t.amount.amount < 0 else t.amount.amount
             returned = t.fee.amount if t.fee and t.fee.amount > 0 else ZERO
-            original = outcome_of.get(t.reference_id or "")
-            to_credits = original in ("duplicate", "overpaid")
-            line("credits" if to_credits else "receivable", debit=amount,
-                 memo=f"Refund of {t.reference_id or 'a payment'}" + (" (duplicate or overpayment)" if to_credits else ""))
+            orig = t.reference_id or ""
+            from_credits = min(amount, credit_left.get(orig, ZERO))
+            if orig in credit_left:
+                credit_left[orig] -= from_credits
+            line("credits", debit=from_credits, memo=f"Refund of {orig or 'a payment'} from customer credits")
+            line("receivable", debit=amount - from_credits, memo=f"Refund of {orig or 'a payment'}")
             line("fees", credit=returned, memo="PayPal fee returned on refund")
             line("paypal", credit=amount - returned, memo=f"PayPal refund {t.id}")
     return lines

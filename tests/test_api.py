@@ -143,3 +143,14 @@ def test_as_of_override(tmp_path, monkeypatch):
     assert body["as_of"] == "2026-10-30"
     # NW-1017 (due 10-31) is not overdue yet on 10-30
     assert next(i for i in body["invoices"] if i["invoice_number"] == "NW-1017")["outcome"] == "open"
+
+
+def test_board_reads_only_the_latest_sync_not_the_whole_history(desk, monkeypatch):
+    # review finding #10: sync_runs grows forever (webhooks add one per event)
+    desk.sync()
+    desk.sync()
+    def boom():
+        raise AssertionError("the board should not load every sync run")
+    monkeypatch.setattr(desk.store, "sync_runs", boom)
+    body = desk.reconciliation()
+    assert body["last_sync"] and desk.store.last_sync()["id"] == 2

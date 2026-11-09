@@ -214,3 +214,109 @@ def test_setup_tool_registers_exactly_the_subscribed_events():
     assert seen["body"]["event_types"] == [{"name": n} for n in EVENT_TYPES]
     with pytest.raises(ValueError):
         create(c, "http://x.example.com/webhooks/paypal")
+
+
+# ---------- review findings #2, #4, #6, #7 ----------
+
+def test_chunked_body_over_the_limit_is_cut_off_without_calling_paypal(make):
+    desk, api = make()
+
+    def chunks():  # no Content-Length: the request is sent chunked
+        for _ in range(MAX_BODY // 4096 + 4):
+            yield b"x" * 4096
+    r = api.post("/webhooks/paypal", content=chunks(), headers={**HEADERS, "Content-Type": "application/json"})
+    assert r.status_code == 413 and desk.client.verify_calls == []
+
+
+@pytest.mark.parametrize("field", ["id", "event_type", "transmission"])
+def test_oversized_fields_are_rejected_before_calling_paypal(make, field):
+    desk, api = make()
+    body, headers = event(), dict(HEADERS)
+    if field == "id":
+        body = event(eid="W" * 300)
+    elif field == "event_type":
+        body = event(etype="X" * 300)
+    else:
+        headers["PAYPAL-TRANSMISSION-ID"] = "t" * 300
+    assert post(api, body, headers).status_code == 400
+    assert desk.client.verify_calls == [] and audit_events(desk) == []
+
+
+def test_a_flood_of_forged_events_is_rate_limited(make):
+    from cashdesk.webhooks import REJECT_LIMIT
+    desk, api = make(Verifier("FAILURE"))
+    codes = [post(api, event(eid=f"WH-F{i}")).status_code for i in range(REJECT_LIMIT + 5)]
+    assert codes[:REJECT_LIMIT] == [400] * REJECT_LIMIT and set(codes[REJECT_LIMIT:]) == {429}
+    assert len(desk.client.verify_calls) == REJECT_LIMIT  # no PayPal call once limited
+    assert audit_events(desk).count("webhook_rejected") == REJECT_LIMIT
+
+
+def test_simultaneous_deliveries_of_one_event_sync_once(make):
+    import threading
+    import time as _t
+    from cashdesk.webhooks import handle
+
+    class Slow(Verifier):
+        def verify_webhook_signature(self, raw_event, headers, *, webhook_id):
+            _t.sleep(0.2)  # both deliveries pass verification at the same time
+            return super().verify_webhook_signature(raw_event, headers, webhook_id=webhook_id)
+
+    desk, _ = make(Slow())
+    runs = len(desk.store.sync_runs())
+    out = []
+    ts = [threading.Thread(target=lambda: out.append(handle(desk, event().encode(), HEADERS))) for _ in range(2)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert sorted(b["status"] for _, b in out) == ["duplicate", "synced"]
+    assert len(desk.store.sync_runs()) == runs + 1
+
+
+def test_a_failed_sync_lets_paypals_retry_through(make):
+    desk, api = make()
+    real = desk.sync
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("PayPal down")
+        return real()
+    desk.sync = flaky
+    assert post(api, event()).status_code == 502
+    assert post(api, event()).json()["status"] == "synced"
+
+
+def test_webhook_work_runs_off_the_event_loop(make, monkeypatch):
+    import asyncio
+    import cashdesk.webhook_app as wa
+    desk, api = make()
+    seen = {}
+
+    def fake_handle(d, raw, headers, **kw):
+        try:
+            asyncio.get_running_loop()
+            seen["on_loop"] = True
+        except RuntimeError:
+            seen["on_loop"] = False  # a worker thread: verify and sync can't block other requests
+        return 200, {"status": "ok"}
+    monkeypatch.setattr(wa, "handle", fake_handle)
+    assert post(api, event()).status_code == 200 and seen == {"on_loop": False}
+
+
+def test_verify_refreshes_a_stale_token_and_retries_429():
+    state = {"verify": 0, "tokens": 0}
+
+    def handler(req: httpx.Request):
+        if req.url.path == "/v1/oauth2/token":
+            state["tokens"] += 1
+            return httpx.Response(200, json={"access_token": f"A21AAtok{state['tokens']}", "expires_in": 3600, "scope": ""})
+        state["verify"] += 1
+        if state["verify"] == 1:
+            return httpx.Response(401, json={"name": "INVALID_TOKEN"})
+        if state["verify"] == 2:
+            return httpx.Response(429, headers={"Retry-After": "0"}, json={"name": "RATE_LIMIT_REACHED"})
+        return httpx.Response(200, json={"verification_status": "SUCCESS"})
+
+    c = SandboxPayPalClient("id", "secret", transport=httpx.MockTransport(handler), sleep=lambda s: None)
+    assert c.verify_webhook_signature(event(), HEADERS, webhook_id="WH-ID-123") == "SUCCESS"
+    assert state["tokens"] == 2 and state["verify"] == 3

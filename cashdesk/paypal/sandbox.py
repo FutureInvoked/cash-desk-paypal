@@ -80,17 +80,17 @@ class SandboxPayPalClient(PayPalClient):
         raise PayPalError(r.status_code, b.get("name") or b.get("error", ""), f"{msg} {detail}".strip(),
                           b.get("debug_id", ""), path)
 
-    def _call(self, method: str, path: str, *, params=None, json=None, request_id: str | None = None,
-              prefer: str | None = None) -> httpx.Response:
+    def _call(self, method: str, path: str, *, params=None, json=None, content: bytes | None = None,
+              request_id: str | None = None, prefer: str | None = None) -> httpx.Response:
         headers = {"Authorization": f"Bearer {self._bearer()}", "Accept": "application/json"}
-        if json is not None:
+        if json is not None or content is not None:
             headers["Content-Type"] = "application/json"
         if request_id:
             headers["PayPal-Request-Id"] = request_id
         if prefer:
             headers["Prefer"] = prefer
         for attempt in range(MAX_RETRIES + 1):
-            r = self._http.request(method, path, params=params, json=json, headers=headers)
+            r = self._http.request(method, path, params=params, json=json, content=content, headers=headers)
             if r.status_code == 429 and attempt < MAX_RETRIES:
                 self._sleep(float(r.headers.get("Retry-After", 2 ** attempt)))
                 continue
@@ -116,11 +116,8 @@ class SandboxPayPalClient(PayPalClient):
                   "transmission_sig": h.get("PAYPAL-TRANSMISSION-SIG"),
                   "transmission_time": h.get("PAYPAL-TRANSMISSION-TIME"), "webhook_id": webhook_id}
         body = _json.dumps(fields)[:-1] + ', "webhook_event": ' + raw_event.strip() + "}"
-        path = "/v1/notifications/verify-webhook-signature"
-        r = self._http.post(path, content=body.encode(), headers={
-            "Authorization": f"Bearer {self._bearer()}", "Content-Type": "application/json", "Accept": "application/json"})
-        if r.status_code >= 400:
-            self._raise(r, path)
+        # through _call: token refresh on 401 and Retry-After on 429, like every other PayPal call
+        r = self._call("POST", "/v1/notifications/verify-webhook-signature", content=body.encode())
         return r.json().get("verification_status", "FAILURE")
 
     # ------------------------------------------------------------------ reads

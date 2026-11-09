@@ -4,7 +4,8 @@ Flow for POST /webhooks/paypal (served by cashdesk.webhook_app, separate from th
   1. size, JSON and header checks           400 / 413, PayPal is not called
   2. PAYPAL_WEBHOOK_ID must be configured   503 otherwise (fail closed)
   3. PayPal verify-webhook-signature        FAILURE -> 400 and an audit record; outage -> 502 so PayPal retries
-  4. event id seen before                   200 "duplicate", no second sync
+  0. more than REJECT_LIMIT unverified events in REJECT_WINDOW -> 429, PayPal is not called
+  4. event id already claimed (atomically)  200 "duplicate", no second sync; a failed sync gives it back
   5. subscribed event type                  re-sync from PayPal's APIs, audit "webhook_received", 200 "synced"
      other verified types                   recorded, 200 "ignored"
 The event body is never trusted for amounts or matching: the re-sync reads the truth from PayPal.
@@ -16,6 +17,10 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
+import time
+from collections import deque
+from contextlib import closing
 from datetime import datetime, timezone
 
 EVENT_TYPES = (
@@ -29,6 +34,10 @@ EVENT_TYPES = (
 REQUIRED_HEADERS = ("PAYPAL-AUTH-ALGO", "PAYPAL-CERT-URL", "PAYPAL-TRANSMISSION-ID",
                     "PAYPAL-TRANSMISSION-SIG", "PAYPAL-TRANSMISSION-TIME")
 MAX_BODY = 256 * 1024
+MAX_ID = 128          # event id and transmission id (PayPal's are ~40 characters)
+MAX_TYPE = 100        # event type names are ~40 characters
+REJECT_LIMIT = 20     # unverified events allowed per window before answering 429 without calling PayPal
+REJECT_WINDOW = 600.0
 
 SCHEMA = """
 create table if not exists webhook_events (
@@ -52,18 +61,53 @@ class WebhookInbox:
         with sqlite3.connect(self.path) as con:
             con.executescript(SCHEMA)
 
-    def seen(self, event_id: str) -> bool:
-        with sqlite3.connect(self.path) as con:
-            return con.execute("select 1 from webhook_events where event_id = ?", (event_id,)).fetchone() is not None
+    def _con(self):
+        return closing(sqlite3.connect(self.path, timeout=30))
 
-    def record(self, ev: dict, action: str) -> None:
-        with sqlite3.connect(self.path) as con:
-            con.execute("insert or ignore into webhook_events values (?,?,?,?,?)",
-                        (ev["id"], ev["event_type"], _resource_id(ev), datetime.now(timezone.utc).isoformat(), action))
+    def claim(self, ev: dict) -> bool:
+        """Atomically take an event id; False if another delivery already has it."""
+        with self._con() as con, con:
+            cur = con.execute("insert or ignore into webhook_events values (?,?,?,?,?)",
+                              (ev["id"], ev["event_type"], _resource_id(ev),
+                               datetime.now(timezone.utc).isoformat(), "processing"))
+            return cur.rowcount == 1
+
+    def finish(self, event_id: str, action: str) -> None:
+        with self._con() as con, con:
+            con.execute("update webhook_events set action = ? where event_id = ?", (action, event_id))
+
+    def release(self, event_id: str) -> None:
+        """Forget a claim whose work failed, so PayPal's retry is processed."""
+        with self._con() as con, con:
+            con.execute("delete from webhook_events where event_id = ?", (event_id,))
 
 
-def handle(desk, raw: bytes, headers) -> tuple[int, dict]:
+class RejectLimiter:
+    """Counts unverified deliveries; past the limit, answer 429 without calling PayPal or writing audit."""
+
+    def __init__(self, limit: int = REJECT_LIMIT, window: float = REJECT_WINDOW, clock=time.monotonic):
+        self.limit, self.window, self.clock = limit, window, clock
+        self.hits: deque[float] = deque()
+        self.lock = threading.Lock()
+
+    def blocked(self) -> bool:
+        with self.lock:
+            now = self.clock()
+            while self.hits and now - self.hits[0] > self.window:
+                self.hits.popleft()
+            return len(self.hits) >= self.limit
+
+    def add(self) -> None:
+        with self.lock:
+            self.hits.append(self.clock())
+
+
+def handle(desk, raw: bytes, headers, limiter: RejectLimiter | None = None) -> tuple[int, dict]:
     from .paypal.sandbox import PayPalError
+
+    if limiter is None:
+        limiter = getattr(desk, "_webhook_limiter", None) or RejectLimiter()
+        desk._webhook_limiter = limiter
 
     if len(raw) > MAX_BODY:
         return 413, {"status": "rejected", "error": "body too large"}
@@ -74,13 +118,20 @@ def handle(desk, raw: bytes, headers) -> tuple[int, dict]:
         return 400, {"status": "rejected", "error": "not JSON"}
     if not isinstance(ev, dict) or not isinstance(ev.get("id"), str) or not isinstance(ev.get("event_type"), str):
         return 400, {"status": "rejected", "error": "not a PayPal event"}
+    if len(ev["id"]) > MAX_ID or len(ev["event_type"]) > MAX_TYPE:
+        return 400, {"status": "rejected", "error": "field too long"}
     h = {k.upper(): v for k, v in dict(headers).items()}
     missing = [k for k in REQUIRED_HEADERS if not h.get(k)]
     if missing:
         return 400, {"status": "rejected", "error": f"missing {', '.join(missing)}"}
+    if any(len(h[k]) > 2048 for k in REQUIRED_HEADERS) or len(h["PAYPAL-TRANSMISSION-ID"]) > MAX_ID:
+        return 400, {"status": "rejected", "error": "header too long"}
     webhook_id = os.environ.get("PAYPAL_WEBHOOK_ID")
     if not webhook_id:
         return 503, {"status": "rejected", "error": "PAYPAL_WEBHOOK_ID is not configured"}
+
+    if limiter.blocked():
+        return 429, {"status": "rejected", "error": "too many unverified events; try later"}
 
     base = {"event_id": ev["id"], "event_type": ev["event_type"], "resource_id": _resource_id(ev),
             "transmission_id": h["PAYPAL-TRANSMISSION-ID"]}
@@ -89,18 +140,23 @@ def handle(desk, raw: bytes, headers) -> tuple[int, dict]:
     except PayPalError as e:
         return 502, {"status": "retry", "error": f"PayPal verify failed: HTTP {e.status}"}
     if status != "SUCCESS":
+        limiter.add()
         desk.audit.append({"event": "webhook_rejected", **base, "verification": status})
         return 400, {"status": "rejected", "error": "signature not verified by PayPal"}
 
     inbox = WebhookInbox(desk.settings.var_dir / "cashdesk.db")
-    if inbox.seen(ev["id"]):
+    if not inbox.claim(ev):  # atomic: of two simultaneous deliveries, exactly one goes on
         return 200, {"status": "duplicate", "event_id": ev["id"]}
     if ev["event_type"] not in EVENT_TYPES:
-        inbox.record(ev, "ignored")
+        inbox.finish(ev["id"], "ignored")
         desk.audit.append({"event": "webhook_received", **base, "verification": status, "action": "ignored"})
         return 200, {"status": "ignored", "event_id": ev["id"]}
-    res = desk.sync()
-    inbox.record(ev, "resync")
+    try:
+        res = desk.sync()
+    except Exception as e:  # PayPal down mid-sync: give the id back so PayPal's retry is processed
+        inbox.release(ev["id"])
+        return 502, {"status": "retry", "error": f"sync failed: {type(e).__name__}"}
+    inbox.finish(ev["id"], "resync")
     desk.audit.append({"event": "webhook_received", **base, "verification": status, "action": "resync",
                        "synced": res})
     return 200, {"status": "synced", "event_id": ev["id"], "synced": res}
