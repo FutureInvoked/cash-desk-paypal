@@ -252,6 +252,40 @@ class UserStore:
         with self._conn() as con:
             con.execute("delete from login_failures where key = ?", (self._keys(username, None)[0],))
 
+    def begin_attempt(self, username: str, ip: str | None) -> list[int] | None:
+        """Check the throttle and record this attempt as a failure in ONE write transaction, before the
+        password is checked: concurrent guesses see each other, so at most five are ever checked.
+        None: throttled. Otherwise the ids of the provisional failure rows (end_attempt clears them)."""
+        now = self.clock()
+        since = _iso(now - FAILURE_WINDOW)
+        keys = self._keys(username, ip)
+        con = sqlite3.connect(self.path, timeout=30, isolation_level=None)
+        try:
+            con.execute("begin immediate")
+            try:
+                if any(con.execute("select count(*) from login_failures where key = ? and at > ?", (k, since)).fetchone()[0]
+                       >= MAX_FAILURES for k in keys):
+                    con.execute("rollback")
+                    return None
+                con.execute("delete from login_failures where at <= ?", (since,))
+                ids = [con.execute("insert into login_failures (key, at) values (?, ?)", (k, _iso(now))).lastrowid
+                       for k in keys]
+                con.execute("commit")
+                return ids
+            except BaseException:
+                con.execute("rollback")
+                raise
+        finally:
+            con.close()
+
+    def end_attempt(self, ids: list[int], user: "User | None") -> None:
+        """A good password removes this attempt's rows and the username's earlier failures."""
+        if user is None:
+            return
+        with self._conn() as con:
+            con.executemany("delete from login_failures where rowid = ?", [(i,) for i in ids])
+            con.execute("delete from login_failures where key = ?", (self._keys(user.username, None)[0],))
+
     # ---- sessions ----
     def create_session(self, username: str) -> str:
         token = secrets.token_urlsafe(32)
@@ -289,9 +323,9 @@ class UserStore:
 class _NoArgvPasswords(argparse.ArgumentParser):
     def parse_args(self, args=None, namespace=None):  # type: ignore[override]
         ns, extra = self.parse_known_args(args, namespace)
-        if extra:
+        if extra:  # name the refused options, never their values
             self.error("unexpected arguments (passwords are never taken from the command line): "
-                       + " ".join(a for a in extra if a.startswith("-")))
+                       + " ".join(a.split("=", 1)[0] for a in extra if a.startswith("-")))
         return ns
 
 

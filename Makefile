@@ -40,7 +40,7 @@ backup: install   ## consistent, verified copy of var/ (database + audit log) in
 	$(BIN)/python -m cashdesk.backup create
 
 clean:
-	rm -rf $(VENV) var/*.db var/*.jsonl
+	rm -rf $(VENV) var/*.db var/*.jsonl var/*.jsonl.head
 
 eval: install
 	$(BIN)/python tools/run_eval.py

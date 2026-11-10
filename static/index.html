@@ -145,7 +145,7 @@
   </div>
 </header>
 <div class="demo-banner" id="demo-banner" role="note" hidden>
-  <span id="demo-banner-text">Public demo with sample data. No PayPal calls. Your changes are private to this browser and reset after 2 hours.</span>
+  <span id="demo-banner-text">Public demo with sample data. No PayPal calls. Your changes are private to this browser and reset after 2 hours idle.</span>
   <button id="demo-reset" hidden>Reset demo</button>
 </div>
 <p class="state" id="booting">Loading…</p>
@@ -357,6 +357,12 @@ async function startBoard() {
   document.getElementById("app").hidden = false;
   document.getElementById("meta").hidden = false;
   document.getElementById("header-actions").hidden = false;
+  await renderWho();
+  load(); loadApprovals(); loadAudit();
+}
+
+// the header for whoever is signed in (also after another tab switched account)
+async function renderWho() {
   const who = document.getElementById("who");
   who.innerHTML = `${esc(me.display_name)} <span class="sub">· ${esc(me.role)}</span>`;
   who.title = `Signed in as ${me.username}`;
@@ -379,7 +385,6 @@ async function startBoard() {
       }
     } catch (e) { /* no switch button */ }
   }
-  load(); loadApprovals(); loadAudit();
 }
 
 // ---------- state ----------
@@ -631,17 +636,18 @@ ActionsRenderer.prototype.init = function (p) {
   const it = p.data;
   this.e = document.createElement("div");
   this.e.className = "row-actions";
-  if (!me || !me.can_write) {
+  const open = ["pending", "awaiting_second", "approved", "failed"].includes(it.status) || stuck(it);
+  if (!open) {  // finished: who acted, for everyone
+    const who = [it.first_by_name, it.decided_by_name].filter(Boolean).join(" + ");
+    this.e.innerHTML = `<span class="sub">${esc(who ? "by " + who : "")}</span>`;
+  } else if (!me || !me.can_write) {
     this.e.innerHTML = `<span class="sub">view only</span>`;
   } else if (it.status === "pending" || it.status === "awaiting_second") {
     const label = it.status === "awaiting_second" ? "2nd approval…" : "Approve…";
     this.e.innerHTML = `<button class="primary" data-act="approve">${label}</button><button class="danger" data-act="reject">Reject…</button>`;
-  } else if (it.status === "approved" || it.status === "failed" || stuck(it)) {
+  } else {
     this.e.innerHTML = `<button class="primary" data-act="retry">${it.status === "approved" ? "Run" : "Retry"}…</button>` +
       (it.status === "approved" && !it.started_at ? `<button class="danger" data-act="reject">Reject…</button>` : "");
-  } else {
-    const who = [it.first_by_name, it.decided_by_name].filter(Boolean).join(" + ");
-    this.e.innerHTML = `<span class="sub">${esc(who ? "by " + who : "")}</span>`;
   }
   this.e.querySelectorAll("button").forEach(b => b.onclick = () => openConfirm(it, b.dataset.act));
 };
@@ -671,7 +677,15 @@ function callsFor(it) {
   return calls.map((c, n) => ({ ...c, rid: calls.length > 1 ? `${rid}-${n === 0 ? "create" : "send"}` : rid }));
 }
 
-function openConfirm(it, act) {
+async function openConfirm(it, act) {
+  // the cookie is shared by every tab: if another tab switched account, name who will really approve
+  let fresh;
+  try { fresh = (await (await apiFetch("/api/me")).json()).user; } catch (e) { return; }
+  if (!fresh) { showSignin("Your session has ended. Sign in again."); return; }
+  if (fresh.username !== me.username) {
+    me = fresh; await renderWho(); approvalsApi.redrawRows();
+    if (!me.can_write) return;
+  }
   current = { it, act };
   lastFocus = document.activeElement;
   const reject = act === "reject";

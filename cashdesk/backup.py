@@ -12,7 +12,9 @@ a restored desk can't run anything the log doesn't back, and never repeats a run
 Every copy is verified before the command says OK, and a manifest records each file's sha256.
 
 Restore: stop the board, move the old data folder aside, restore into an empty folder, start the
-board, and check the audit tab (or `make audit-verify`).
+board, and check the audit tab (or `make audit-verify`). A restore ends every session and withdraws
+approvals that never ran (each with an audit record): PayPal may have moved on since the backup, so
+they are proposed again on the next sync and need a fresh approval. Check the user list it prints.
 """
 
 from __future__ import annotations
@@ -92,14 +94,20 @@ def backup(var_dir: Path | str, dest: Path | str) -> dict:
 
 
 def check(dest: Path | str) -> list[str]:
-    """Problems with a backup folder (empty list: it is sound)."""
+    """Problems with a backup folder (empty list: it is sound). Never writes to it."""
     dest = Path(dest)
     try:
         manifest = json.loads((dest / "manifest.json").read_text())
     except (OSError, ValueError) as e:
         return [f"manifest.json unreadable: {e}"]
+    files = manifest.get("files") or {}
+    audit = manifest.get("audit") or {}
     problems = []
-    for name, info in manifest.get("files", {}).items():
+    if DB not in files:
+        problems.append(f"the manifest lists no {DB}")
+    if (audit.get("count") or 0) > 0 and LOG not in files:
+        problems.append(f"the manifest counts {audit.get('count')} audit records but lists no {LOG}")
+    for name, info in files.items():
         p = dest / name
         if not p.exists():
             problems.append(f"{name} is missing")
@@ -107,23 +115,26 @@ def check(dest: Path | str) -> list[str]:
             problems.append(f"{name} changed since the backup (sha256 differs)")
     if problems:
         return problems
-    con = sqlite3.connect(dest / DB)
     try:
-        ok = con.execute("pragma integrity_check").fetchone()[0]
+        con = sqlite3.connect(f"file:{(dest / DB).resolve()}?mode=ro", uri=True)  # read only: never creates
+        try:
+            ok = con.execute("pragma integrity_check").fetchone()[0]
+        finally:
+            con.close()
     except sqlite3.DatabaseError as e:
         ok = str(e)
-    finally:
-        con.close()
     if ok != "ok":
         problems.append(f"{DB} fails SQLite's integrity check: {ok}")
     if (dest / LOG).exists():
         v = verify(dest / LOG)
         if not v.ok:
             problems.append(f"{LOG} does not verify: {v.error}")
+        elif (v.count, v.head_hash) != (audit.get("count"), audit.get("head_hash")):
+            problems.append(f"the audit log has {v.count} records, the manifest says {audit.get('count')}")
     return problems
 
 
-def restore(src: Path | str, var_dir: Path | str) -> None:
+def restore(src: Path | str, var_dir: Path | str) -> dict:
     src, var_dir = Path(src), Path(var_dir)
     problems = check(src)
     if problems:
@@ -136,9 +147,19 @@ def restore(src: Path | str, var_dir: Path | str) -> None:
     for f in FILES:
         if (src / f).exists():
             shutil.copy2(src / f, var_dir / f)
+    from .audit import AuditLog
+    from .queue import ApprovalQueue
+    from .users import UserStore
+    users = UserStore(var_dir / DB)
+    with users._conn() as con:
+        ended = con.execute("delete from sessions").rowcount  # everyone signs in again
+    withdrawn = ApprovalQueue(var_dir / DB, on_event=AuditLog(var_dir / LOG).append).withdraw_unstarted(
+        "restored from a backup: approve it again after a sync")
     v = verify(var_dir / LOG)
     if not v.ok:
         raise RuntimeError(f"restored, but the audit log does not verify: {v.error}")
+    return {"sessions_ended": ended, "withdrawn": withdrawn,
+            "users": [(u.username, u.display_name, u.role, u.disabled) for u in users.list()]}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -173,8 +194,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"OK: {args.dest} is intact")
         else:
             target = Path(args.var_dir) if args.var_dir else var_dir
-            restore(args.src, target)
-            print(f"OK: restored into {target}; start the board and check the audit tab")
+            out = restore(args.src, target)
+            print(f"OK: restored into {target}; {out['sessions_ended']} session(s) ended; "
+                  f"{len(out['withdrawn'])} approval(s) that never ran withdrawn (approve them again after a sync)")
+            print("Accounts in the restored data (check them; disable any that should no longer approve):")
+            for username, name, role, disabled in out["users"]:
+                print(f"  {username}\t{name}\t{role}" + ("\t(disabled)" if disabled else ""))
     except (OSError, ValueError, RuntimeError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

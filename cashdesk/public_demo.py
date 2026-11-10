@@ -2,11 +2,13 @@
 
 Sample data only: the server refuses to start with any PayPal or AI credential, or in sandbox mode.
 Each visitor gets a private workspace (its own SQLite file, audit log and the two demo approvers),
-created by the one-click demo sign-in and found again by the `cashdesk_demo` cookie. Page loads,
-health checks and bots never create one. Workspaces are capped (least recently used goes first),
-dropped after 2 hours idle and on "Reset demo", and one address can only open so many an hour.
-Every address is held to a request rate. Settings: CASHDESK_DEMO_MAX_WORKSPACES (50),
-CASHDESK_DEMO_IDLE_MINUTES (120), CASHDESK_DEMO_NEW_PER_HOUR (10), CASHDESK_DEMO_RATE (per minute, 120).
+opened by a successful one-click demo sign-in and found again by the `cashdesk_demo` cookie. Page
+loads, health checks, bots and refused sign-ins never open one. Workspaces are dropped after 2 hours
+idle and on "Reset demo". When the cap is reached, the least recently used workspace makes room only
+if nobody has used it for 30 minutes; otherwise newcomers are told the demo is busy (503), so nobody
+is evicted in the middle of the demo. One address can only open so many an hour, and every address is
+held to a request rate. Settings: CASHDESK_DEMO_MAX_WORKSPACES (100), CASHDESK_DEMO_IDLE_MINUTES (120),
+CASHDESK_DEMO_KEEP_MINUTES (30), CASHDESK_DEMO_NEW_PER_HOUR (10), CASHDESK_DEMO_RATE (per minute, 120).
 
 Behind Render's proxy (CASHDESK_BEHIND_PROXY=1) the client is CF-Connecting-IP (Cloudflare, which
 fronts Render, sets and overwrites it), else True-Client-IP, else the rightmost X-Forwarded-For entry.
@@ -35,7 +37,7 @@ TOKEN = re.compile(r"[A-Za-z0-9_-]{20,64}")
 CREDENTIALS = ("PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AI_API_KEY",
                "CODEX_BIN")
 BANNER = ("Public demo with sample data. No PayPal calls. Your changes are private to this browser "
-          "and reset after 2 hours.")
+          "and reset after 2 hours idle.")
 
 # the workspace of the request being served (None: this visitor has none yet)
 current_desk: ContextVar = ContextVar("cashdesk_demo_desk", default=None)
@@ -68,12 +70,17 @@ def guardrail_errors(paypal_mode: str) -> list[str]:
     return errors
 
 
+class PoolBusy(Exception):
+    """Every workspace is in use by someone active in the last few minutes."""
+
+
 class WorkspacePool:
     def __init__(self, root: Path | str, *, clock: Callable[[], datetime] | None = None):
         self.root = Path(root)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
-        self.max = _int("CASHDESK_DEMO_MAX_WORKSPACES", 50)
+        self.max = _int("CASHDESK_DEMO_MAX_WORKSPACES", 100)
         self.idle = timedelta(minutes=_int("CASHDESK_DEMO_IDLE_MINUTES", 120))
+        self.keep = timedelta(minutes=_int("CASHDESK_DEMO_KEEP_MINUTES", 30))
         self.new_per_hour = _int("CASHDESK_DEMO_NEW_PER_HOUR", 10)
         self.rate = _int("CASHDESK_DEMO_RATE", 120)
         self._lock = threading.Lock()
@@ -119,6 +126,8 @@ class WorkspacePool:
             self._sweep(now)
             while len(self._spaces) >= self.max:
                 oldest = min(self._spaces, key=lambda t: self._spaces[t][1])
+                if now - self._spaces[oldest][1] < self.keep:
+                    raise PoolBusy("every demo workspace is in use right now")
                 self._drop(oldest)
             token = secrets.token_urlsafe(24)
             desk = Desk(client=FixturePayPalClient(), var_dir=self.path_of(token),
@@ -156,15 +165,12 @@ class WorkspacePool:
 
 
 def _cookie(scope, name: str) -> str | None:
-    from http.cookies import SimpleCookie
+    """Starlette's own lenient parser (the one that reads the session cookie): one malformed cookie
+    set by another app on the same host must not hide this one."""
+    from starlette.requests import cookie_parser
     for k, v in scope.get("headers", []):
         if k == b"cookie":
-            jar = SimpleCookie()
-            try:
-                jar.load(v.decode("latin-1"))
-            except Exception:  # noqa: BLE001 - a malformed cookie header is no cookie
-                return None
-            return jar[name].value if name in jar else None
+            return cookie_parser(v.decode("latin-1")).get(name)
     return None
 
 
@@ -176,7 +182,8 @@ async def _reply(send, status: int, detail: str) -> None:
 
 
 class DemoGate:
-    """Request rate per address; finds the visitor's workspace (or opens one on demo sign-in)."""
+    """Request rate per address; finds the visitor's workspace. (A workspace is opened by the demo
+    sign-in route, once the username is known to be a demo approver.)"""
 
     def __init__(self, app, pool: WorkspacePool):
         self.app, self.pool = app, pool
@@ -188,24 +195,10 @@ class DemoGate:
         ip = (scope.get("client") or ("unknown", 0))[0]
         if path != "/api/health" and not self.pool.allow_request(ip):
             return await _reply(send, 429, "too many requests from your address; wait a minute")
-        token = _cookie(scope, DEMO_COOKIE)
-        desk = self.pool.get(token)
-        opened = None
-        if desk is None and path == "/api/demo-login" and method == "POST":
-            if not self.pool.allow_new(ip):
-                return await _reply(send, 429, "too many demo workspaces opened from your address; try again later")
-            opened, desk = self.pool.create()
-        secure = "; Secure" if scope.get("scheme") == "https" else ""
-
-        async def send_with_cookie(message):
-            if opened and message["type"] == "http.response.start":
-                cookie = f"{DEMO_COOKIE}={opened}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400{secure}"
-                message = {**message, "headers": [*message.get("headers", []), (b"set-cookie", cookie.encode())]}
-            await send(message)
-
+        desk = self.pool.get(_cookie(scope, DEMO_COOKIE))
         mark = current_desk.set(desk)
         try:
-            await self.app(scope, receive, send_with_cookie)
+            await self.app(scope, receive, send)
         finally:
             current_desk.reset(mark)
 

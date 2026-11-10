@@ -52,7 +52,7 @@ class Desk:
         self.store = Store(var / "cashdesk.db")
         self.audit = AuditLog(var / "audit.jsonl")
         self.queue = ApprovalQueue(var / "cashdesk.db", policy=policy, clock=self.clock, on_event=self.audit.append,
-                                   witness=self._approval_records, require_users=True)
+                                   witness=self._approval_records, require_users=True, person=self._can_approve)
         self.users = UserStore(var / "cashdesk.db", clock=self.clock)
         if self.demo_allowed:
             self.users.ensure_demo_users()
@@ -65,6 +65,14 @@ class Desk:
     def demo_allowed(self) -> bool:
         """One-click demo approvers exist only on sample data: a fixture client never calls PayPal."""
         return self.client.mode == "fixtures"
+
+    def _can_approve(self, by: str) -> bool:
+        """Whether a recorded approver (`user:<username>`) still counts: the account exists, is enabled,
+        can act, and isn't a demo approver outside sample data."""
+        if not by or not by.startswith("user:"):
+            return False
+        u = self.users.get(by[len("user:"):])
+        return u is not None and u.can_write and (not u.demo or self.demo_allowed)
 
     def acting(self, user: User) -> User:
         """The account as it is now: still there, enabled and allowed to act."""

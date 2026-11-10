@@ -11,7 +11,7 @@ services:
     buildCommand: pip install -r requirements.lock
     startCommand: python -m uvicorn cashdesk.app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
-    autoDeploy: true
+    autoDeploy: true    # only when Render is connected to the repo; a service made from the public repo URL deploys by hand (Manual Deploy)
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7

@@ -101,13 +101,21 @@ def test_switching_demo_user_keeps_the_workspace(env):
     assert app.state.demo_pool.count() == 1
 
 
-def test_workspaces_are_capped_least_recently_used_goes_first(env):
+def test_workspaces_are_capped_busy_while_everyone_is_active_then_the_oldest_makes_room(env):
     app = make(env, CASHDESK_DEMO_MAX_WORKSPACES="3")
+    pool = app.state.demo_pool
+    now = [datetime(2026, 11, 10, 9, 0, tzinfo=timezone.utc)]
+    pool.clock = lambda: now[0]
     first = alex(visitor(app))
-    others = [alex(visitor(app)) for _ in range(3)]
-    assert app.state.demo_pool.count() == 3
-    assert first.get("/api/me").json() == {"user": None}  # its workspace made room
-    assert all(o.get("/api/me").json()["user"]["username"] == "alex" for o in others)
+    others = [alex(visitor(app)) for _ in range(2)]
+    assert visitor(app).post("/api/demo-login", json={"username": "alex"}).status_code == 503
+    now[0] += timedelta(minutes=31)
+    for o in others:
+        assert o.get("/api/me").json()["user"]["username"] == "alex"  # used again: they stay
+    late = alex(visitor(app))
+    assert pool.count() == 3
+    assert first.get("/api/me").json() == {"user": None}  # idle 31 minutes: its workspace made room
+    assert late.get("/api/me").json()["user"]["username"] == "alex"
 
 
 def test_an_idle_workspace_is_dropped_after_two_hours(env):

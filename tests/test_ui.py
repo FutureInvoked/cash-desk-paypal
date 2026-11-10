@@ -192,3 +192,17 @@ def test_every_data_call_goes_through_the_401_aware_fetch():
     raw = re.findall(r'(?<![A-Za-z])fetch\("/api/(reconciliation|approvals|audit|sync|proposals|export)', HTML)
     assert raw == [], raw
     assert "apiFetch(url" in _fn("post")
+
+
+# ---------- seventh review: L11 ----------
+
+def test_the_dialog_rechecks_who_is_signed_in_before_it_names_the_approver():
+    oc = _fn("openConfirm")
+    assert oc.startswith("async function openConfirm") or "async function openConfirm" in HTML
+    assert 'apiFetch("/api/me")' in oc and "renderWho" in oc
+
+
+def test_finished_rows_show_who_even_to_viewers():
+    r = HTML[HTML.index("ActionsRenderer.prototype.init"):]
+    r = r[:r.index("};")]
+    assert r.index("first_by_name") < r.index("view only")  # who acted is shown before the role check

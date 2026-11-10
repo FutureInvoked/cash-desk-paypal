@@ -98,6 +98,8 @@ INVISIBLE = set("\u115f\u1160\u3164\uffa0\u2800")
 
 
 ACCOUNT = re.compile(r"user:[a-z0-9][a-z0-9._-]{1,31}")
+NOT_A_PERSON = ("a typed name from an older version, a disabled account, or a demo approver outside "
+                "sample data")
 
 
 def is_account(by: str | None) -> bool:
@@ -180,11 +182,15 @@ class QueueItem:
 class ApprovalQueue:
     def __init__(self, path: Path | str, *, policy: Policy | None = None,
                  clock: Callable[[], datetime] | None = None, on_event: Callable[[dict], None] | None = None,
-                 witness: Callable[[str], list[dict] | None] | None = None, require_users: bool = False):
+                 witness: Callable[[str], list[dict] | None] | None = None, require_users: bool = False,
+                 person: Callable[[str], bool] | None = None):
         self.path = Path(path)
-        # the Desk sets this: approvals then come only from signed-in accounts, and a name typed into
-        # an older version never counts as a person (see approve, reject and execute)
+        # the Desk sets these: approvals then come only from signed-in accounts (marked "auth": "session"
+        # in the audit log), and only approvals by accounts that can still approve count (`person`: the
+        # account exists, isn't disabled, and isn't a demo approver outside sample data). A name typed
+        # into an older version never counts as a person, whatever it looks like.
         self.require_users = require_users
+        self.person = person
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.policy = policy or Policy()
         self.clock = clock or (lambda: datetime.now(timezone.utc))
@@ -386,7 +392,7 @@ class ApprovalQueue:
         `name`: how the approver is shown (their display name); `by` is who they are."""
         limit = KEEP if limit is None else limit
         self._check_actor(by)
-        named = {"by_name": name} if name else {}
+        named = ({"by_name": name} if name else {}) | ({"auth": "session"} if self.require_users else {})
         err = None
         with self._locked() as con:
             item = self._read(con, item_id)
@@ -397,13 +403,14 @@ class ApprovalQueue:
             if item.status == "awaiting_second" and self._same_person(by, item.first_by):
                 raise NotExecutable(f"{item_id} was first approved by {shown_name(item.first_by, item.first_name)}; "
                                     f"a different person must give the second approval")
-            if item.status == "awaiting_second" and self.require_users and not is_account(item.first_by):
-                # a typed name is not a person: two signed-in approvers are needed
+            if item.status == "awaiting_second" and self.require_users and not self._counts(item.first_by, item, "first_approval"):
+                # a typed name (whatever it looks like), a disabled account or a demo approver outside
+                # sample data is not one of the two people: start the two approvals again
                 self._write(con, item_id, status="pending", first_by=None, first_at=None, approved_hash=None,
                             first_name=None)
                 self._emit_in(con, "first_approval_reset", item_id,
-                              reason="the first approval was a typed name from an older version")
-                err = NotExecutable(f"{item_id}: its first approval was a typed name from an older version; "
+                              reason="the first approval does not count: " + NOT_A_PERSON)
+                err = NotExecutable(f"{item_id}: its first approval does not count ({NOT_A_PERSON}); "
                                     f"it is pending again and needs two signed-in approvers")
             elif item.status == "awaiting_second" and self._first_unwitnessed(item):
                 # e.g. a first approval given by an older version: start the two approvals again
@@ -450,11 +457,23 @@ class ApprovalQueue:
         in a way that proves PayPal did nothing (started_at is cleared then)."""
         return item.status in ("approved", "failed") and item.started_at is None
 
+    def _counts(self, by: str | None, item: QueueItem, event: str) -> bool:
+        """In account mode: an approval counts only when it is an account that can still approve AND the
+        audit log shows that account giving it through a session (a typed `user:...` never does)."""
+        if not is_account(by) or (self.person is not None and not self.person(by)):
+            return False
+        if self.witness is None:
+            return True
+        recs = self.witness(item.id) or []
+        return any(r.get("event") == event and r.get("auth") == "session" and r.get("by") == by
+                   and r.get("proposal_hash") == item.approved_hash for r in recs)
+
     def _typed(self, item: QueueItem) -> bool:
-        """Approved with a typed name (an older version) while approvals now come from accounts."""
+        """In account mode: approved by someone who doesn't count as an approver (see _counts)."""
         if not self.require_users:
             return False
-        return not is_account(item.decided_by) or (item.approvals_needed > 1 and not is_account(item.first_by))
+        return (not self._counts(item.decided_by, item, "approved")
+                or (item.approvals_needed > 1 and not self._counts(item.first_by, item, "first_approval")))
 
     @staticmethod
     def _legacy_stuck(item: QueueItem) -> bool:
@@ -480,6 +499,21 @@ class ApprovalQueue:
                         decided_name=name)
             self._emit_in(con, status, item_id, by=by, note=note, **({"by_name": name} if name else {}))
         return self.get(item_id)
+
+    def withdraw_unstarted(self, reason: str) -> list[str]:
+        """After a restore: approvals that never started are withdrawn (each with an audit record), so
+        nothing approved before the backup can run on data that may have moved on since; the actions
+        are proposed again on the next refresh. Runs that started stay, to be finished with their id."""
+        out = []
+        with self._locked() as con:
+            rows = con.execute("select id from queue_items where status in ('approved', 'awaiting_second') or "
+                               "(status = 'failed' and started_at is null)").fetchall()
+            for (item_id,) in rows:
+                self._write(con, item_id, status="withdrawn", decided_at=_iso(self.clock()),
+                            decided_by="system:restore", note=reason)
+                self._emit_in(con, "withdrawn", item_id, by="system:restore", note=reason)
+                out.append(item_id)
+        return out
 
     def expire_stale(self) -> list[str]:
         """Pending items, and approved ones PayPal never acted on, expire. A run PayPal may have acted
@@ -577,8 +611,8 @@ class ApprovalQueue:
                                     f"reject it and it will be proposed again")
             if item.started_at is None and self._typed(item):
                 # a run that may have reached PayPal is always finished; one that never started needs
-                # approvals from signed-in accounts
-                raise NotExecutable(f"{item_id} was approved with a typed name by an older version; "
+                # approvals from accounts that can still approve
+                raise NotExecutable(f"{item_id} was approved by someone who no longer counts ({NOT_A_PERSON}); "
                                     f"reject it and it will be proposed again for a signed-in approval")
             why = self._witnessed(item)
             if why:

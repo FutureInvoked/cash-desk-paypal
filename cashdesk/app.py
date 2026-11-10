@@ -216,22 +216,39 @@ def create_app(desk=None) -> FastAPI:
         if public:  # the public demo has only the one-click demo approvers
             raise HTTPException(401, BAD_LOGIN)
         users, ip = d().users, request.client.host if request.client else None
-        if users.login_blocked(body.username, ip):  # checked before the password: guessing gets nowhere
+        attempt = users.begin_attempt(body.username, ip)  # counted before the password is checked
+        if attempt is None:
             raise HTTPException(429, "too many failed sign-ins; try again in 15 minutes")
         user = users.authenticate(body.username, body.password)
+        users.end_attempt(attempt, user)
         if user is None:
-            users.login_failed(body.username, ip)
             raise HTTPException(401, BAD_LOGIN)
-        users.login_succeeded(user.username)
         return signed_in(request, user)
 
     @app.post("/api/demo-login")
     def demo_login(body: DemoLogin, request: Request) -> JSONResponse:
+        opened = None
+        if public and public_demo.current_desk.get() is None:
+            # a workspace opens only for a real demo approver, within the address's hourly allowance
+            from .users import DEMO_USERS
+            if body.username.strip().lower() not in {u for u, _ in DEMO_USERS}:
+                raise HTTPException(404, "no such demo user")
+            if not pool.allow_new(request.client.host if request.client else "unknown"):
+                raise HTTPException(429, "too many demo workspaces opened from your address; try again later")
+            try:
+                opened, ws = pool.create()
+            except public_demo.PoolBusy:
+                raise HTTPException(503, "the demo is busy right now; try again in a few minutes")
+            public_demo.current_desk.set(ws)
         desk = d()
         user = desk.users.get(body.username) if desk.demo_allowed else None
         if user is None or not user.demo or user.disabled:
             raise HTTPException(404, "no such demo user")
-        return signed_in(request, user)
+        resp = signed_in(request, user)
+        if opened:
+            resp.set_cookie(public_demo.DEMO_COOKIE, opened, httponly=True, samesite="strict", path="/",
+                            secure=request.url.scheme == "https", max_age=86400)
+        return resp
 
     @app.post("/api/logout")
     def logout(request: Request) -> JSONResponse:
