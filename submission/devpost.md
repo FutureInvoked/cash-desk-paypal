@@ -142,7 +142,7 @@ added real approver accounts and the hosted demo.
 - A tamper-evident audit trail. Edit, delete, reorder or truncate a line, and `make audit-verify`
   names the first bad record.
 - A zero-key demo that is honest about which parts are AI and which are rules.
-- Six independent adversarial reviews. Every finding became a failing test first, then a fix.
+- Seven independent adversarial reviews. Every finding became a failing test first, then a fix.
 
 ## What we learned
 
