@@ -19,6 +19,7 @@ from cashdesk.matcher import match
 from cashdesk.models import Invoice, Money, Transaction
 from cashdesk.paypal import FixturePayPalClient
 from cashdesk.queue import ApprovalQueue, NotExecutable, PolicyBlocked
+from tests.accounts_helper import user
 
 AS_OF = date(2026, 11, 7)
 T0 = datetime(2026, 11, 7, 9, 0, tzinfo=timezone.utc)
@@ -95,7 +96,7 @@ def test_2_rewriting_proposal_and_fingerprint_in_sqlite_is_refused(desk):
     from cashdesk.queue import proposal_hash, proposal_to_dict, proposal_from_dict
     d = desk()
     item = overpay_item(d)
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     p = proposal_to_dict(d.queue.get(item.id).proposal)
     p["target"] = "CAPTUREOTHER0001"
     p["api_calls"][0]["path"] = "/v2/payments/captures/CAPTUREOTHER0001/refund"
@@ -122,7 +123,7 @@ def test_2_status_flipped_to_approved_in_sqlite_does_not_run(desk):
 def test_2_a_normal_approval_still_runs(desk):
     d = desk()
     item = overpay_item(d)
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     assert d.execute(item.id)["status"] == "executed"
 
 
@@ -149,7 +150,7 @@ def test_3_overpayment_limit_is_revalidated_after_sync(desk):
                    invoice_ref=None)]
     d.sync()
     with pytest.raises(PolicyBlocked):
-        d.approve(item.id, "owner")
+        d.approve(item.id, user(d, "owner"))
         d.execute(item.id)
     assert c.calls == []
 
@@ -159,8 +160,8 @@ def test_3_duplicate_refunded_elsewhere_is_not_refunded_again(desk):
     d = desk(c)
     d.refresh_proposals()
     item = next(i for i in d.queue.list() if i.proposal.type == "refund_capture")
-    d.approve(item.id, "owner")
-    d.approve(item.id, "partner")  # 800.00: two people
+    d.approve(item.id, user(d, "owner"))
+    d.approve(item.id, user(d, "partner"))  # 800.00: two people
     cap = next(t for t in d.store.transactions() if t.id == item.proposal.target)
     c.extra = [txn("EXTREF000000002", str(-cap.amount.amount), cap.initiated + timedelta(hours=1), code="T1107",
                    ref=cap.id, invoice_ref=None)]

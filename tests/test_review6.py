@@ -22,7 +22,7 @@ from cashdesk.paypal.sandbox import PayPalError
 from cashdesk.queue import NotExecutable, PolicyBlocked
 from tests.review_a_common import AS_OF as A_AS_OF, D, balance, invoice, money, run, txn
 from tests.test_review4 import desk, item_of  # noqa: F401  (fixture)
-from tests.accounts_helper import sign_in
+from tests.accounts_helper import sign_in, user
 
 AS_OF = datetime(2026, 11, 7).date()
 T0 = datetime(2026, 11, 7, 9, 0, tzinfo=timezone.utc)
@@ -166,7 +166,7 @@ def test_m1_retry_rechecks_the_limit_when_paypal_never_acted(desk, kind):
     c = Refuses()
     d = desk(c)
     item = item_of(d, "refund_overpayment")
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     with pytest.raises((PayPalError, httpx.ConnectError)):
         d.execute(item.id)
     assert d.queue.get(item.id).started_at is None
@@ -185,10 +185,10 @@ def test_m5_a_failed_run_paypal_never_acted_on_can_be_rejected(desk):
             raise PayPalError(422, "UNPROCESSABLE_ENTITY", "the invoice is already paid", "dbg", path)
     d = desk(Refuses())
     item = item_of(d, "send_reminder")
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     with pytest.raises(PayPalError):
         d.execute(item.id)
-    assert d.reject(item.id, "owner", "already paid")["status"] == "rejected"
+    assert d.reject(item.id, user(d, "owner"), "already paid")["status"] == "rejected"
 
 
 # ---------- M2: the audit witness reads the item's latest state ----------
@@ -196,8 +196,8 @@ def test_m5_a_failed_run_paypal_never_acted_on_can_be_rejected(desk):
 def test_m2_a_rejected_approval_cannot_be_revived_in_sqlite(desk):
     d = desk()
     item = item_of(d, "refund_overpayment")
-    d.approve(item.id, "owner")
-    d.reject(item.id, "owner", "changed my mind")
+    d.approve(item.id, user(d, "owner"))
+    d.reject(item.id, user(d, "owner"), "changed my mind")
     with sqlite3.connect(d.queue.path) as con:
         con.execute("update queue_items set status = 'approved' where id = ?", (item.id,))
     with pytest.raises(NotExecutable):
@@ -208,7 +208,7 @@ def test_m2_a_rejected_approval_cannot_be_revived_in_sqlite(desk):
 def test_m2_an_executed_item_reset_in_sqlite_does_not_run_again(desk):
     d = desk()
     item = item_of(d, "refund_overpayment")
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     d.execute(item.id)
     with sqlite3.connect(d.queue.path) as con:
         con.execute("update queue_items set status = 'approved', started_at = null, request_id = 'cashdesk-x-1' "
@@ -244,12 +244,12 @@ def test_m5_the_hourly_cap_refuses_for_now_without_blocking(desk):
     d.refresh_proposals()
     first, second = [i for i in d.queue.list() if i.proposal.type == "send_reminder"][:2]
     assert {first.status, second.status} == {"pending"}
-    d.approve(first.id, "owner")
+    d.approve(first.id, user(d, "owner"))
     with pytest.raises(PolicyBlocked):
-        d.approve(second.id, "owner")
+        d.approve(second.id, user(d, "owner"))
     assert d.queue.get(second.id).status == "pending"
     d.now["t"] = T0 + timedelta(hours=2)
-    assert d.approve(second.id, "owner")["status"] == "approved"
+    assert d.approve(second.id, user(d, "owner"))["status"] == "approved"
 
 
 def test_m5_an_unbacked_approval_rejected_comes_back_as_a_proposal(desk):
@@ -258,7 +258,7 @@ def test_m5_an_unbacked_approval_rejected_comes_back_as_a_proposal(desk):
     item = unwitnessed_approved(d)
     with pytest.raises(NotExecutable, match="proposed again"):
         d.execute(item.id)
-    assert d.reject(item.id, "owner", None)["status"] == "withdrawn"
+    assert d.reject(item.id, user(d, "owner"), None)["status"] == "withdrawn"
     assert d.refresh_proposals()["enqueued"] == 1
 
 
@@ -345,11 +345,15 @@ def test_m9_a_paypal_refusal_comes_back_with_its_reason(api):
 
 
 @pytest.mark.parametrize("name", [" ", "​", "\t", "ㅤ"])
-def test_l4_an_invisible_approver_name_is_refused(api, name):
+def test_l4_an_invisible_approver_name_cannot_stand_in_for_a_person(api, name):
+    """Since accounts (P2) nobody types a name: the approver is the signed-in account, and a name in
+    the body, invisible or not, is ignored. (Invisible display names are refused when an account is
+    made: tests/test_accounts.py.)"""
     _, c = api
     c.post("/api/proposals/refresh")
     it = shown(c, "refund_capture")
-    assert c.post(f"/api/approvals/{it['id']}/approve", json={"by": name, "proposal_hash": it["proposal_hash"]}).status_code == 422
+    r = c.post(f"/api/approvals/{it['id']}/approve", json={"by": name, "proposal_hash": it["proposal_hash"]})
+    assert r.status_code == 200 and r.json()["first_by"] == "user:owner" and r.json()["first_by_name"] == "Owner"
 
 
 def test_l9_approve_is_bound_to_the_proposal_shown(api):
@@ -502,5 +506,5 @@ def test_l10_an_old_executing_item_without_a_fingerprint_can_be_closed(desk):
         con.execute("update queue_items set status = 'executing', approved_hash = null, decided_by = 'owner' "
                     "where id = ?", (item.id,))
     # closed, but not proposed again: a run that started may have reached PayPal
-    assert d.reject(item.id, "owner", "approved by an older version")["status"] == "rejected"
+    assert d.reject(item.id, user(d, "owner"), "approved by an older version")["status"] == "rejected"
     assert d.refresh_proposals()["enqueued"] == 0

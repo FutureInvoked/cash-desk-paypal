@@ -45,7 +45,7 @@ class Desk:
         self.store = Store(var / "cashdesk.db")
         self.audit = AuditLog(var / "audit.jsonl")
         self.queue = ApprovalQueue(var / "cashdesk.db", policy=policy, clock=self.clock, on_event=self.audit.append,
-                                   witness=self._approval_records)
+                                   witness=self._approval_records, require_users=True)
         self.users = UserStore(var / "cashdesk.db", clock=self.clock)
         if self.demo_allowed:
             self.users.ensure_demo_users()
@@ -58,6 +58,19 @@ class Desk:
     def demo_allowed(self) -> bool:
         """One-click demo approvers exist only on sample data: a fixture client never calls PayPal."""
         return self.client.mode == "fixtures"
+
+    def acting(self, user: User) -> User:
+        """The account as it is now: still there, enabled and allowed to act."""
+        if not isinstance(user, User):
+            raise TypeError("approvals come from a signed-in account (cashdesk.users.User), not a typed name")
+        now = self.users.get(user.username)
+        if now is None or now.disabled:
+            raise PermissionError(f"{user.username} is not an active account")
+        if not now.can_write:
+            raise PermissionError(f"{now.display_name} can view but not act (role: {now.role})")
+        if now.demo and not self.demo_allowed:
+            raise PermissionError("demo approvers act only on sample data")
+        return now
 
     def user_for(self, token: str | None) -> User | None:
         u = self.users.session_user(token)
@@ -207,17 +220,22 @@ class Desk:
         self.queue.expire_stale()  # nothing waits past its 24 hours just because nobody clicked
         return [i.to_dict() for i in self.queue.list()]
 
-    def approve(self, item_id: str, by: str, expected_hash: str | None = None) -> dict:
+    def approve(self, item_id: str, user: User, expected_hash: str | None = None) -> dict:
+        u = self.acting(user)
         item = self.queue.get(item_id)
-        return self.queue.approve(item_id, by=by, limit=self.current_limit(item.proposal),
+        return self.queue.approve(item_id, by=u.identity, name=u.display_name, limit=self.current_limit(item.proposal),
                                   expected_hash=expected_hash).to_dict()
 
-    def reject(self, item_id: str, by: str, note: str | None) -> dict:
-        return self.queue.reject(item_id, by=by, note=note).to_dict()
+    def reject(self, item_id: str, user: User, note: str | None) -> dict:
+        u = self.acting(user)
+        return self.queue.reject(item_id, by=u.identity, name=u.display_name, note=note).to_dict()
 
-    def execute(self, item_id: str) -> dict:
+    def execute(self, item_id: str, user: User | None = None) -> dict:
+        """`user`: who pressed Run (the board always says; recorded on the run's audit record)."""
+        u = self.acting(user) if user is not None else None
         item = self.queue.get(item_id)
-        item = self.queue.execute(item_id, self.client, limit=self.current_limit(item.proposal))
+        item = self.queue.execute(item_id, self.client, limit=self.current_limit(item.proposal),
+                                  by=u.identity if u else None, name=u.display_name if u else None)
         self._result = None  # PayPal state changed; re-reconcile on next read (after a sync)
         return item.to_dict()
 

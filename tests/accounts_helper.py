@@ -18,3 +18,11 @@ def demo_sign_in(client, username: str = "alex"):
     r = client.post("/api/demo-login", json={"username": username})
     assert r.status_code == 200, r.text
     return client
+
+
+def user(desk, username: str = "owner", *, role: str = "approver", name: str | None = None):
+    """The account a Desk call acts as (created on first use)."""
+    u = desk.users.get(username)
+    if u is None:
+        u = desk.users.add(username, name or username.title(), role, PASSWORD)
+    return u

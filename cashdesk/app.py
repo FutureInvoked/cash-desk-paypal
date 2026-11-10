@@ -26,7 +26,7 @@ class DemoLogin(BaseModel):
 
 
 class Decision(BaseModel):
-    by: str = Field(min_length=1, max_length=80)
+    # who decides is the signed-in account; a "by" sent by an older board is ignored
     note: str | None = Field(default=None, max_length=500)
     # the fingerprint of the proposal the approver was shown (the board sends it)
     proposal_hash: str | None = Field(default=None, max_length=64)
@@ -108,6 +108,8 @@ def create_app(desk=None) -> FastAPI:
             raise HTTPException(422, {"message": str(e), "violations": e.violations, "status": e.item.status})
         except NotExecutable as e:
             raise HTTPException(409, str(e))
+        except PermissionError as e:
+            raise HTTPException(403, str(e))
         except ValueError as e:
             raise HTTPException(422, str(e))
         except PayPalError as e:
@@ -196,19 +198,19 @@ def create_app(desk=None) -> FastAPI:
 
     @app.post("/api/approvals/{item_id}/approve")
     def approve(item_id: str, body: Decision, user: User = Depends(need_writer)) -> dict:
-        def approve_shown(iid, by, h):
+        def approve_shown(iid, h):
             if not h:  # approve what you were shown: the fingerprint comes from GET /api/approvals
                 raise ValueError("proposal_hash is required: send the fingerprint of the proposal you reviewed")
-            return d().approve(iid, by, h)
-        return guarded(approve_shown, item_id, body.by, body.proposal_hash)
+            return d().approve(iid, user, h)
+        return guarded(approve_shown, item_id, body.proposal_hash)
 
     @app.post("/api/approvals/{item_id}/reject")
     def reject(item_id: str, body: Decision, user: User = Depends(need_writer)) -> dict:
-        return guarded(d().reject, item_id, body.by, body.note)
+        return guarded(d().reject, item_id, user, body.note)
 
     @app.post("/api/approvals/{item_id}/execute")
     def execute(item_id: str, user: User = Depends(need_writer)) -> dict:
-        return guarded(d().execute, item_id)
+        return guarded(d().execute, item_id, user)
 
     @app.get("/api/export/journal.csv")
     def journal_csv(user: User = Depends(need_user)) -> Response:

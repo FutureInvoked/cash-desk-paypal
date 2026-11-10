@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import secrets
 import sqlite3
 from contextlib import contextmanager
@@ -57,7 +58,9 @@ create table if not exists queue_items (
     first_by text,
     first_at text,
     approved_hash text,
-    started_at text
+    started_at text,
+    first_name text,
+    decided_name text
 );
 """
 # queue status -> what the policy's history sees
@@ -92,6 +95,22 @@ def proposal_from_dict(d: dict) -> Proposal:
 
 # letters that render as nothing (Hangul fillers, braille blank): not a name
 INVISIBLE = set("\u115f\u1160\u3164\uffa0\u2800")
+
+
+ACCOUNT = re.compile(r"user:[a-z0-9][a-z0-9._-]{1,31}")
+
+
+def is_account(by: str | None) -> bool:
+    """A signed-in account (`user:<username>`), as opposed to a name typed by an older version."""
+    return bool(by) and ACCOUNT.fullmatch(by) is not None
+
+
+def shown_name(by: str | None, name: str | None) -> str | None:
+    if name:
+        return name
+    if not by:
+        return None
+    return by[len("user:"):] if is_account(by) else f"{by} (typed name, older version)"
 
 
 def _person(name: str | None) -> str:
@@ -141,6 +160,8 @@ class QueueItem:
     approvals_needed: int = 1
     approved_hash: str | None = None
     started_at: datetime | None = None
+    first_name: str | None = None
+    decided_name: str | None = None
 
     def to_dict(self) -> dict:
         p = proposal_to_dict(self.proposal)
@@ -151,14 +172,19 @@ class QueueItem:
                 "executed_at": _iso(self.executed_at), "result": self.result, "error": self.error,
                 "invoice_due": self.invoice_due.to_paypal() if self.invoice_due else None,
                 "first_by": self.first_by, "first_at": _iso(self.first_at), "approvals_needed": self.approvals_needed,
+                "first_by_name": shown_name(self.first_by, self.first_name),
+                "decided_by_name": shown_name(self.decided_by, self.decided_name),
                 "started_at": _iso(self.started_at), "stale_after_seconds": STALE_EXECUTING_SECONDS}
 
 
 class ApprovalQueue:
     def __init__(self, path: Path | str, *, policy: Policy | None = None,
                  clock: Callable[[], datetime] | None = None, on_event: Callable[[dict], None] | None = None,
-                 witness: Callable[[str], list[dict] | None] | None = None):
+                 witness: Callable[[str], list[dict] | None] | None = None, require_users: bool = False):
         self.path = Path(path)
+        # the Desk sets this: approvals then come only from signed-in accounts, and a name typed into
+        # an older version never counts as a person (see approve, reject and execute)
+        self.require_users = require_users
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.policy = policy or Policy()
         self.clock = clock or (lambda: datetime.now(timezone.utc))
@@ -167,7 +193,7 @@ class ApprovalQueue:
         with self._conn() as con:
             con.executescript(SCHEMA)
             cols = {r[1] for r in con.execute("pragma table_info(queue_items)")}
-            for col in ("first_by", "first_at", "approved_hash", "started_at"):  # older databases
+            for col in ("first_by", "first_at", "approved_hash", "started_at", "first_name", "decided_name"):  # older databases
                 if col not in cols:
                     con.execute(f"alter table queue_items add column {col} text")
 
@@ -191,7 +217,7 @@ class ApprovalQueue:
             executed_at=_dt(r["executed_at"]), result=json.loads(r["result"]) if r["result"] else None,
             error=r["error"], invoice_due=Money(Decimal(due["value"]), due["currency_code"]) if due else None,
             first_by=r["first_by"], first_at=_dt(r["first_at"]), approved_hash=r["approved_hash"],
-            started_at=_dt(r["started_at"]))
+            started_at=_dt(r["started_at"]), first_name=r["first_name"], decided_name=r["decided_name"])
 
     def get(self, item_id: str) -> QueueItem:
         with self._conn() as con:
@@ -347,12 +373,20 @@ class ApprovalQueue:
             self._write(con, item.id, invoice_due=json.dumps(limit.to_paypal()) if limit else None)
         return item
 
-    def approve(self, item_id: str, *, by: str, limit=None, expected_hash: str | None = None) -> QueueItem:
-        """`expected_hash`: the fingerprint of the proposal the approver was shown (the board sends it);
-        if the stored proposal differs (a reset database, another tab), nothing is approved."""
-        limit = KEEP if limit is None else limit
+    def _check_actor(self, by: str | None) -> None:
+        if self.require_users and not is_account(by):
+            raise ValueError("approvals come from a signed-in account")
         if not _person(by):
             raise ValueError("an approver name with at least one visible letter is required")
+
+    def approve(self, item_id: str, *, by: str, name: str | None = None, limit=None,
+                expected_hash: str | None = None) -> QueueItem:
+        """`expected_hash`: the fingerprint of the proposal the approver was shown (the board sends it);
+        if the stored proposal differs (a reset database, another tab), nothing is approved.
+        `name`: how the approver is shown (their display name); `by` is who they are."""
+        limit = KEEP if limit is None else limit
+        self._check_actor(by)
+        named = {"by_name": name} if name else {}
         err = None
         with self._locked() as con:
             item = self._read(con, item_id)
@@ -361,11 +395,20 @@ class ApprovalQueue:
             if expected_hash and expected_hash != proposal_hash(item.proposal):
                 raise NotExecutable(f"{item_id} is not the proposal you were shown; reload and check it again")
             if item.status == "awaiting_second" and self._same_person(by, item.first_by):
-                raise NotExecutable(f"{item_id} was first approved by {item.first_by}; "
+                raise NotExecutable(f"{item_id} was first approved by {shown_name(item.first_by, item.first_name)}; "
                                     f"a different person must give the second approval")
-            if item.status == "awaiting_second" and self._first_unwitnessed(item):
+            if item.status == "awaiting_second" and self.require_users and not is_account(item.first_by):
+                # a typed name is not a person: two signed-in approvers are needed
+                self._write(con, item_id, status="pending", first_by=None, first_at=None, approved_hash=None,
+                            first_name=None)
+                self._emit_in(con, "first_approval_reset", item_id,
+                              reason="the first approval was a typed name from an older version")
+                err = NotExecutable(f"{item_id}: its first approval was a typed name from an older version; "
+                                    f"it is pending again and needs two signed-in approvers")
+            elif item.status == "awaiting_second" and self._first_unwitnessed(item):
                 # e.g. a first approval given by an older version: start the two approvals again
-                self._write(con, item_id, status="pending", first_by=None, first_at=None, approved_hash=None)
+                self._write(con, item_id, status="pending", first_by=None, first_at=None, approved_hash=None,
+                            first_name=None)
                 self._emit_in(con, "first_approval_reset", item_id,
                               reason="the first approval of this proposal is not in the audit log")
                 err = NotExecutable(f"{item_id}: its first approval isn't in the audit log; "
@@ -382,14 +425,14 @@ class ApprovalQueue:
                     # the audit record carries the fingerprint and the request id it authorises
                     if item.status == "pending" and item.approvals_needed > 1:
                         self._write(con, item_id, status="awaiting_second", first_by=by, first_at=now,
-                                    policy=json.dumps(d.to_dict()), approved_hash=h)
+                                    policy=json.dumps(d.to_dict()), approved_hash=h, first_name=name)
                         self._emit_in(con, "first_approval", item_id, by=by, proposal_hash=h,
-                                      request_id=item.request_id)
+                                      request_id=item.request_id, **named)
                     else:
                         self._write(con, item_id, status="approved", decided_at=now, decided_by=by,
-                                    policy=json.dumps(d.to_dict()), approved_hash=h)
+                                    policy=json.dumps(d.to_dict()), approved_hash=h, decided_name=name)
                         self._emit_in(con, "approved", item_id, by=by, proposal_hash=h, request_id=item.request_id,
-                                      **({"first_by": item.first_by} if item.first_by else {}))
+                                      **named, **({"first_by": item.first_by} if item.first_by else {}))
         if err:
             raise err
         return self.get(item_id)
@@ -407,27 +450,35 @@ class ApprovalQueue:
         in a way that proves PayPal did nothing (started_at is cleared then)."""
         return item.status in ("approved", "failed") and item.started_at is None
 
+    def _typed(self, item: QueueItem) -> bool:
+        """Approved with a typed name (an older version) while approvals now come from accounts."""
+        if not self.require_users:
+            return False
+        return not is_account(item.decided_by) or (item.approvals_needed > 1 and not is_account(item.first_by))
+
     @staticmethod
     def _legacy_stuck(item: QueueItem) -> bool:
         """An item from an older version with no approval fingerprint: it can't run, so it may be closed."""
         return item.status in ("approved", "executing", "failed") and not item.approved_hash
 
-    def reject(self, item_id: str, *, by: str, note: str | None = None) -> QueueItem:
+    def reject(self, item_id: str, *, by: str, name: str | None = None, note: str | None = None) -> QueueItem:
         """Pending items, approved ones PayPal never acted on, and stuck items from older versions can
         be rejected. Rejecting an approval the audit log doesn't back marks it `withdrawn`: the action
-        is proposed again on the next refresh (it was never really approved)."""
-        if not _person(by):
-            raise ValueError("an approver name with at least one visible letter is required")
+        is proposed again on the next refresh (it was never really approved). So is an approval typed
+        into an older version, once approvals come from accounts."""
+        self._check_actor(by)
         with self._locked() as con:
             item = self._read(con, item_id)
             if not (item.status in ("pending", "awaiting_second") or self._never_acted(item)
                     or self._legacy_stuck(item)):
                 raise NotExecutable(f"{item_id} is {item.status}; only pending items, or approved ones "
                                     f"that PayPal never acted on, can be rejected")
-            unbacked = item.status in ("approved", "failed") and (self._legacy_stuck(item) or bool(self._witnessed(item)))
+            unbacked = item.status in ("approved", "failed") and (self._legacy_stuck(item) or self._typed(item)
+                                                                   or bool(self._witnessed(item)))
             status = "withdrawn" if unbacked else "rejected"
-            self._write(con, item_id, status=status, decided_at=_iso(self.clock()), decided_by=by, note=note)
-            self._emit_in(con, status, item_id, by=by, note=note)
+            self._write(con, item_id, status=status, decided_at=_iso(self.clock()), decided_by=by, note=note,
+                        decided_name=name)
+            self._emit_in(con, status, item_id, by=by, note=note, **({"by_name": name} if name else {}))
         return self.get(item_id)
 
     def expire_stale(self) -> list[str]:
@@ -498,8 +549,13 @@ class ApprovalQueue:
             return False
         return True
 
-    def execute(self, item_id: str, client: PayPalClient, *, limit=None) -> QueueItem:
+    def execute(self, item_id: str, client: PayPalClient, *, limit=None, by: str | None = None,
+                name: str | None = None) -> QueueItem:
+        """`by`/`name`: who pressed Run (recorded on the run's audit record)."""
         limit = KEEP if limit is None else limit
+        if by is not None:
+            self._check_actor(by)
+        runner = {k: v for k, v in (("by", by), ("by_name", name)) if v}
         item = self.get(item_id)
         if item.status == "executed":
             return item  # idempotent: never send twice
@@ -519,6 +575,11 @@ class ApprovalQueue:
             if not item.approved_hash:
                 raise NotExecutable(f"{item_id} has no approval fingerprint (approved by an older version); "
                                     f"reject it and it will be proposed again")
+            if item.started_at is None and self._typed(item):
+                # a run that may have reached PayPal is always finished; one that never started needs
+                # approvals from signed-in accounts
+                raise NotExecutable(f"{item_id} was approved with a typed name by an older version; "
+                                    f"reject it and it will be proposed again for a signed-in approval")
             why = self._witnessed(item)
             if why:
                 raise NotExecutable(f"{item_id}: {why}")
@@ -539,7 +600,7 @@ class ApprovalQueue:
                 self._write(con, item_id, status="executing", request_id=request_id,
                             started_at=_iso(item.started_at) if retry else _iso(self.clock()))
                 self._emit_in(con, "executing", item_id, request_id=request_id, retry=retry,
-                              api_calls=item.proposal.api_calls)
+                              api_calls=item.proposal.api_calls, **runner)
         if err:
             raise err
         item = self.get(item_id)

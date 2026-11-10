@@ -4,6 +4,7 @@ dictionaries and run the production parsers.
 """
 import pytest
 from tests.review_a_common import *  # noqa: F403
+from tests.accounts_helper import user
 
 
 def test_aggregate_paid_amount_is_not_a_second_receipt():
@@ -145,6 +146,6 @@ def test_partially_refunded_duplicate_queues_only_the_remainder(monkeypatch, tmp
     d.refresh_proposals()
     (item,) = [x for x in d.queue.list() if x.proposal.type == "refund_capture"]
     assert item.status == "pending" and item.proposal.amount.amount == D("0.01")
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     assert d.execute(item.id)["status"] == "executed"
     assert c.calls[0]["body"]["amount"] == money(1)

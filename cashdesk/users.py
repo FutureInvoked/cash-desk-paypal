@@ -72,6 +72,11 @@ class User:
     disabled: bool = False
 
     @property
+    def identity(self) -> str:
+        """Who approved, as the queue and the audit log record it."""
+        return f"user:{self.username}"
+
+    @property
     def can_write(self) -> bool:
         return self.role in WRITE_ROLES and not self.disabled
 

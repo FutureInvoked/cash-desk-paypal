@@ -25,14 +25,18 @@ r = c.get("/api/reconciliation").json()
 assert len(r["transactions"]) == 26 and len(r["invoices"]) == 26 and r["ai_status"].startswith("fallback"), r["ai_status"]
 assert c.post("/api/proposals/refresh").json()["enqueued"] == 7
 item = next(i for i in c.get("/api/approvals").json()["items"] if i["proposal"]["type"] == "refund_capture")
-assert c.post(f"/api/approvals/{item['id']}/approve", json={"by": "judge", "proposal_hash": item["proposal_hash"]}).json()["status"] == "awaiting_second"
+assert c.post(f"/api/approvals/{item['id']}/approve", json={"proposal_hash": item["proposal_hash"]}).json()["status"] == "awaiting_second"
 assert c.post(f"/api/approvals/{item['id']}/execute").status_code == 409  # one approver is not enough
-assert c.post(f"/api/approvals/{item['id']}/approve", json={"by": "second judge", "proposal_hash": item["proposal_hash"]}).json()["status"] == "approved"
-assert c.post(f"/api/approvals/{item['id']}/execute").json()["status"] == "executed"
+assert c.post(f"/api/approvals/{item['id']}/approve", json={"proposal_hash": item["proposal_hash"]}).status_code == 409  # same account again
+sam = TestClient(c.app, base_url="http://127.0.0.1:8000")
+assert sam.post("/api/demo-login", json={"username": "sam"}).status_code == 200
+r = sam.post(f"/api/approvals/{item['id']}/approve", json={"proposal_hash": item["proposal_hash"]}).json()
+assert r["status"] == "approved" and (r["first_by_name"], r["decided_by_name"]) == ("Alex (owner)", "Sam (bookkeeper)"), r
+assert sam.post(f"/api/approvals/{item['id']}/execute").json()["status"] == "executed"
 a = c.get("/api/audit").json(); assert a["verify"]["ok"] and a["verify"]["count"] == 11, a["verify"]
 j = c.get("/api/export/journal.csv"); assert j.status_code == 200 and j.text.startswith("date,entry_id,account")
 assert "Cash Desk for PayPal" in c.get("/").text
-print("SMOKE OK: health, demo sign-in, 26/26 rows, 7 proposals, two-person refund executed, journal export, audit chain of 11 verified")
+print("SMOKE OK: health, demo sign-in, 26/26 rows, 7 proposals, two-person refund (Alex then Sam) executed, journal export, audit chain of 11 verified")
 PY
 $CLEAN make audit-verify
 echo "FRESH CLONE OK ($TMP, removed on exit)"

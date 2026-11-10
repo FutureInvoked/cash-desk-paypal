@@ -17,6 +17,7 @@ from cashdesk.audit import AuditLog, main as audit_main, verify
 from cashdesk.models import Money
 from cashdesk.paypal import FixturePayPalClient
 from cashdesk.queue import NotExecutable, PolicyBlocked
+from tests.accounts_helper import user
 
 T0 = datetime(2026, 11, 7, 9, 0, tzinfo=timezone.utc)
 USD = lambda v: Money(Decimal(v), "USD")
@@ -134,13 +135,13 @@ def test_h1_a_failed_audit_write_leaves_the_queue_unchanged(desk):
         raise OSError("disk full")
     d.queue.on_event = broken
     with pytest.raises(OSError):
-        d.approve(item.id, "owner")
+        d.approve(item.id, user(d, "owner"))
     assert d.queue.get(item.id).status == "pending"  # not approved without a record of it
     with pytest.raises(OSError):
-        d.reject(item.id, "owner", None)
+        d.reject(item.id, user(d, "owner"), None)
     assert d.queue.get(item.id).status == "pending"
     d.queue.on_event = real
-    assert d.approve(item.id, "owner")["status"] == "approved"
+    assert d.approve(item.id, user(d, "owner"))["status"] == "approved"
 
 
 # ---------- H2 / M4: an approval the audit log doesn't show has a way out ----------
@@ -161,7 +162,7 @@ def test_h2_m4_an_unbacked_approval_can_be_rejected_and_proposed_again(desk, wit
     with pytest.raises(NotExecutable):
         d.execute(item.id)
     # withdrawn: never really approved, so the action is proposed again on the next refresh
-    assert d.reject(item.id, "owner", "approval not in the audit log")["status"] == "withdrawn"
+    assert d.reject(item.id, user(d, "owner"), "approval not in the audit log")["status"] == "withdrawn"
     assert d.client.calls == []
 
 
@@ -180,10 +181,10 @@ def test_m4_first_approval_from_an_older_version_starts_over(desk):
     with sqlite3.connect(d.queue.path) as con:
         con.execute("update queue_items set status = 'awaiting_second', first_by = 'owner' where id = ?", (item.id,))
     with pytest.raises(NotExecutable):
-        d.approve(item.id, "partner")
+        d.approve(item.id, user(d, "partner"))
     assert d.queue.get(item.id).status == "pending"
-    d.approve(item.id, "owner")
-    d.approve(item.id, "partner")
+    d.approve(item.id, user(d, "owner"))
+    d.approve(item.id, user(d, "partner"))
     assert d.execute(item.id)["status"] == "executed"
 
 
@@ -193,11 +194,11 @@ def test_a_started_run_cannot_be_rejected(desk):
         lost = set()
     d = desk(Lossy())
     item = item_of(d, "refund_overpayment")
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     with pytest.raises(httpx.ReadTimeout):
         d.execute(item.id)
     with pytest.raises(NotExecutable):
-        d.reject(item.id, "owner", None)
+        d.reject(item.id, user(d, "owner"), None)
 
 
 # ---------- H3: a retry after 24 h, or after the sync shows the refund ----------
@@ -210,7 +211,7 @@ def test_h3_lost_reply_near_expiry_is_retried_not_refunded_twice(desk):
     d = desk(c)
     item = item_of(d, "refund_overpayment")
     d.now["t"] = T0 + timedelta(hours=23, minutes=50)
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     with pytest.raises(httpx.ReadTimeout):
         d.execute(item.id)
     d.now["t"] = T0 + timedelta(hours=24, minutes=5)
@@ -224,7 +225,7 @@ def test_h3_lost_reply_near_expiry_is_retried_not_refunded_twice(desk):
 def test_h3_crashed_run_is_retried_after_expiry_with_its_own_id(desk):
     d = desk()
     item = item_of(d, "refund_overpayment")
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     with sqlite3.connect(d.queue.path) as con:  # died after claiming the run
         con.execute("update queue_items set status = 'executing', started_at = ? where id = ?",
                     ((T0 + timedelta(minutes=1)).isoformat(), item.id))
@@ -242,7 +243,7 @@ def test_h3_a_sync_showing_the_refund_does_not_block_the_retry(desk):
     c = Lossy()
     d = desk(c)
     item = item_of(d, "refund_overpayment")
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     with pytest.raises(httpx.ReadTimeout):
         d.execute(item.id)
     cap = next(t for t in d.store.transactions() if t.id == item.proposal.target)
@@ -285,7 +286,7 @@ def test_m1_draft_invoice_sent_but_reply_lost_finishes(desk):
     c = Lossy()
     d = desk(c)
     item = item_of(d, "create_draft_invoice")
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     with pytest.raises(httpx.ReadTimeout):
         d.execute(item.id)
     done = d.execute(item.id)
@@ -307,7 +308,7 @@ def test_m1_crash_between_create_and_send_reuses_the_new_invoice(desk):
     c = Lossy()
     d = desk(c)
     item = item_of(d, "create_draft_invoice")
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     with pytest.raises(httpx.ConnectError):
         d.execute(item.id)
     assert d.execute(item.id)["status"] == "executed"
@@ -326,7 +327,7 @@ def test_m2_failed_refund_is_not_done_and_can_be_proposed_again(desk, status):
             return super().execute_call(method, path, body, request_id=request_id)
     d = desk(Refuses())
     item = item_of(d, "refund_overpayment")
-    d.approve(item.id, "owner")
+    d.approve(item.id, user(d, "owner"))
     assert d.execute(item.id)["status"] == "declined"
     d.refresh_proposals()
     assert [i.status for i in d.queue.list() if i.proposal.type == "refund_overpayment"] == ["declined", "pending"]
@@ -417,7 +418,7 @@ def test_l3_clock_skew_refuses_for_now_without_blocking_for_good(desk):
     item = item_of(d, "refund_overpayment")
     d.now["t"] = T0 - timedelta(minutes=20)  # clock stepped back
     with pytest.raises(PolicyBlocked):
-        d.approve(item.id, "owner")
+        d.approve(item.id, user(d, "owner"))
     assert d.queue.get(item.id).status == "pending"
     d.now["t"] = T0 + timedelta(minutes=1)
-    assert d.approve(item.id, "owner")["status"] == "approved"
+    assert d.approve(item.id, user(d, "owner"))["status"] == "approved"

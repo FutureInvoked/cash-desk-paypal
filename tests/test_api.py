@@ -77,7 +77,9 @@ def test_approve_then_execute(api, desk):
     item = next(i for i in api.get("/api/approvals").json()["items"] if i["proposal"]["type"] == "refund_capture")
     r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner", "proposal_hash": item["proposal_hash"]})
     assert r.status_code == 200 and r.json()["status"] == "awaiting_second"  # 800.00 refund: two people
-    r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "bookkeeper", "proposal_hash": item["proposal_hash"]})
+    # the second approval comes from a different signed-in account
+    bookkeeper = sign_in(TestClient(create_app(desk)), desk, "bookkeeper")
+    r = bookkeeper.post(f"/api/approvals/{item['id']}/approve", json={"proposal_hash": item["proposal_hash"]})
     assert r.status_code == 200 and r.json()["status"] == "approved"
     r = api.post(f"/api/approvals/{item['id']}/execute")
     assert r.status_code == 200 and r.json()["status"] == "executed"
