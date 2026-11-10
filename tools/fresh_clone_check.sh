@@ -18,6 +18,9 @@ from fastapi.testclient import TestClient
 from cashdesk.app import create_app
 c = TestClient(create_app(), base_url="http://127.0.0.1:8000")  # a real board host
 h = c.get("/api/health").json(); assert h == {"status": "ok", "paypal_mode": "fixtures", "version": h["version"]}, h
+assert c.get("/api/reconciliation").status_code == 401  # signed out
+demo = [u["username"] for u in c.get("/api/login-options").json()["demo_users"]]; assert demo == ["alex", "sam"], demo
+assert c.post("/api/demo-login", json={"username": "alex"}).status_code == 200
 r = c.get("/api/reconciliation").json()
 assert len(r["transactions"]) == 26 and len(r["invoices"]) == 26 and r["ai_status"].startswith("fallback"), r["ai_status"]
 assert c.post("/api/proposals/refresh").json()["enqueued"] == 7
@@ -29,7 +32,7 @@ assert c.post(f"/api/approvals/{item['id']}/execute").json()["status"] == "execu
 a = c.get("/api/audit").json(); assert a["verify"]["ok"] and a["verify"]["count"] == 11, a["verify"]
 j = c.get("/api/export/journal.csv"); assert j.status_code == 200 and j.text.startswith("date,entry_id,account")
 assert "Cash Desk for PayPal" in c.get("/").text
-print("SMOKE OK: health, 26/26 rows, 7 proposals, two-person refund executed, journal export, audit chain of 11 verified")
+print("SMOKE OK: health, demo sign-in, 26/26 rows, 7 proposals, two-person refund executed, journal export, audit chain of 11 verified")
 PY
 $CLEAN make audit-verify
 echo "FRESH CLONE OK ($TMP, removed on exit)"

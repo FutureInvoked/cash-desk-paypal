@@ -22,6 +22,7 @@ from cashdesk.paypal.sandbox import PayPalError
 from cashdesk.queue import NotExecutable, PolicyBlocked
 from tests.review_a_common import AS_OF as A_AS_OF, D, balance, invoice, money, run, txn
 from tests.test_review4 import desk, item_of  # noqa: F401  (fixture)
+from tests.accounts_helper import sign_in
 
 AS_OF = datetime(2026, 11, 7).date()
 T0 = datetime(2026, 11, 7, 9, 0, tzinfo=timezone.utc)
@@ -49,7 +50,7 @@ def link(tid, num, conf=0.99, reason="transaction_info.transaction_amount suppor
 
 def board(d):
     from cashdesk.app import create_app
-    return TestClient(create_app(d), raise_server_exceptions=False)
+    return sign_in(TestClient(create_app(d), raise_server_exceptions=False), d)
 
 
 def shown(api, ptype):
@@ -312,7 +313,7 @@ def api(tmp_path, monkeypatch):
     monkeypatch.setenv("CASHDESK_VAR_DIR", str(tmp_path))
     d = Desk(client=FixturePayPalClient(), reconciler=FallbackReconciler(), clock=lambda: T0)
     from cashdesk.app import create_app
-    return d, TestClient(create_app(d), base_url="http://127.0.0.1:8000", raise_server_exceptions=False)
+    return d, sign_in(TestClient(create_app(d), base_url="http://127.0.0.1:8000", raise_server_exceptions=False), d)
 
 
 @pytest.mark.parametrize("origin", ["http://127.0.0.1:9999", "https://127.0.0.1:8000", "http://localhost:8000"])

@@ -12,6 +12,7 @@ from cashdesk.app import create_app
 from cashdesk.paypal import FixturePayPalClient
 from cashdesk.service import Desk
 from tools.make_fixtures import inv_id, txn_id
+from tests.accounts_helper import sign_in
 
 
 @pytest.fixture
@@ -28,7 +29,7 @@ def desk(tmp_path, monkeypatch):
 
 @pytest.fixture
 def api(desk):
-    return TestClient(create_app(desk))
+    return sign_in(TestClient(create_app(desk)), desk)
 
 
 def test_health_still_works(api):
@@ -104,6 +105,8 @@ def test_expired_approval_returns_policy_violations(api, desk):
     api.post("/api/proposals/refresh")
     item = api.get("/api/approvals").json()["items"][0]
     desk._now[0] += timedelta(hours=30)
+    assert api.get("/api/approvals").status_code == 401  # 30 hours later the session has ended too
+    sign_in(api, desk)
     r = api.post(f"/api/approvals/{item['id']}/approve", json={"by": "owner", "proposal_hash": item["proposal_hash"]})
     assert r.status_code == 422
     assert "expired" in [v["code"] for v in r.json()["detail"]["violations"]]
@@ -139,7 +142,7 @@ def test_as_of_override(tmp_path, monkeypatch):
     monkeypatch.setenv("CASHDESK_VAR_DIR", str(tmp_path))
     monkeypatch.setenv("CASHDESK_AS_OF", "2026-10-30")
     d = Desk(client=FixturePayPalClient(), reconciler=FallbackReconciler())
-    body = TestClient(create_app(d)).get("/api/reconciliation").json()
+    body = sign_in(TestClient(create_app(d)), d).get("/api/reconciliation").json()
     assert body["as_of"] == "2026-10-30"
     # NW-1017 (due 10-31) is not overdue yet on 10-30
     assert next(i for i in body["invoices"] if i["invoice_number"] == "NW-1017")["outcome"] == "open"

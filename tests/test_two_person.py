@@ -13,6 +13,7 @@ from cashdesk.models import Money
 from cashdesk.paypal import FixturePayPalClient
 from cashdesk.policy import Policy, PolicyConfig
 from cashdesk.queue import ApprovalQueue, NotExecutable
+from tests.accounts_helper import sign_in
 
 AS_OF = date(2026, 11, 7)
 T0 = datetime(2026, 11, 7, 9, 0, tzinfo=timezone.utc)
@@ -149,7 +150,7 @@ def test_api_reports_the_second_approval_step(tmp_path, monkeypatch):
     from cashdesk.app import create_app
     from cashdesk.service import Desk
     desk = Desk(client=FixturePayPalClient(), reconciler=FallbackReconciler(), clock=lambda: T0)
-    api = TestClient(create_app(desk))
+    api = sign_in(TestClient(create_app(desk)), desk)
     api.post("/api/proposals/refresh")
     item = next(i for i in api.get("/api/approvals").json()["items"] if i["proposal"]["type"] == "refund_capture")
     assert item["approvals_needed"] == 2

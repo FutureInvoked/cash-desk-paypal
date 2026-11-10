@@ -15,6 +15,7 @@ from cashdesk.ai import FallbackReconciler, reconcile
 from cashdesk.journal import ACCOUNTS, COLUMNS, journal, to_csv
 from cashdesk.paypal import FixturePayPalClient
 from tools.make_fixtures import txn_id
+from tests.accounts_helper import sign_in
 
 AS_OF = date(2026, 11, 7)
 
@@ -135,7 +136,8 @@ def test_export_endpoint(tmp_path, monkeypatch):
     from cashdesk.app import create_app
     from cashdesk.service import Desk
     T0 = datetime(2026, 11, 7, 9, 0, tzinfo=timezone.utc)
-    api = TestClient(create_app(Desk(client=FixturePayPalClient(), reconciler=FallbackReconciler(), clock=lambda: T0)))
+    d = Desk(client=FixturePayPalClient(), reconciler=FallbackReconciler(), clock=lambda: T0)
+    api = sign_in(TestClient(create_app(d)), d)
     r = api.get("/api/export/journal.csv")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
     assert 'attachment; filename="cashdesk-journal-2026-11-07.csv"' == r.headers["content-disposition"]

@@ -23,6 +23,7 @@ from .paypal.base import PayPalClient
 from .policy import Policy
 from .queue import ApprovalQueue
 from .store import Store
+from .users import User, UserStore
 
 FIXTURES_AS_OF = date(2026, 11, 7)
 UNRECONCILED = {"unmatched", "currency_mismatch", "duplicate"}
@@ -45,9 +46,24 @@ class Desk:
         self.audit = AuditLog(var / "audit.jsonl")
         self.queue = ApprovalQueue(var / "cashdesk.db", policy=policy, clock=self.clock, on_event=self.audit.append,
                                    witness=self._approval_records)
+        self.users = UserStore(var / "cashdesk.db", clock=self.clock)
+        if self.demo_allowed:
+            self.users.ensure_demo_users()
         self._result: MatchResult | None = None
         self._result_run: int | None = None
         self._lock = threading.Lock()
+
+    # ---- accounts ----
+    @property
+    def demo_allowed(self) -> bool:
+        """One-click demo approvers exist only on sample data: a fixture client never calls PayPal."""
+        return self.client.mode == "fixtures"
+
+    def user_for(self, token: str | None) -> User | None:
+        u = self.users.session_user(token)
+        if u is not None and u.demo and not self.demo_allowed:
+            return None  # a demo session from sample-data days never acts on the sandbox
+        return u
 
     # ---- time window ----
     @property

@@ -24,6 +24,7 @@ from cashdesk.policy import Policy, PolicyConfig
 from cashdesk.queue import ApprovalQueue, NotExecutable, PolicyBlocked
 from tests.test_matcher_followups import refund_of
 from tools.make_fixtures import txn_id
+from tests.accounts_helper import sign_in
 
 AS_OF = date(2026, 11, 7)
 T0 = datetime(2026, 11, 7, 9, 0, tzinfo=timezone.utc)
@@ -168,7 +169,7 @@ def test_m1_foreign_host_is_refused(board):
 def test_m1_foreign_origin_on_writes_is_refused(board):
     from fastapi.testclient import TestClient
     desk, app = board
-    api = TestClient(app, base_url="http://127.0.0.1:8000")
+    api = sign_in(TestClient(app, base_url="http://127.0.0.1:8000"), desk)
     assert api.post("/api/proposals/refresh", headers={"Origin": "https://evil.example"}).status_code == 403
     assert desk.queue.list() == []
     assert api.post("/api/proposals/refresh", headers={"Origin": "http://127.0.0.1:8000"}).status_code == 200
