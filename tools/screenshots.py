@@ -6,8 +6,9 @@ Start a fresh board with no keys and no AI, then run this against it:
     rm -rf var/shots && PAYPAL_MODE=fixtures AI_PROVIDER=none CASHDESK_VAR_DIR=var/shots make demo
     python tools/screenshots.py http://127.0.0.1:8000 docs/screenshots
 
-It proposes actions, opens the approve dialog of the 800.00 duplicate refund (two approvers), runs
-one reminder so the audit log has a full approve-and-run trail, and saves five JPEGs.
+It shoots the sign-in screen, signs in as the demo approver Alex, proposes actions, gives the first
+approval of the 800.00 duplicate refund, approves and runs one reminder, then switches to Sam and
+opens the refund's second approval (the dialog shot), runs it, and shoots the audit log.
 """
 
 from __future__ import annotations
@@ -19,6 +20,17 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 
+def approve_in_dialog(page, item_id: str, *, shot: Path | None = None) -> None:
+    page.click(f"#approvals-grid .ag-row[row-id='{item_id}'] [data-act='approve']")
+    page.wait_for_selector("dialog#confirm[open]")
+    time.sleep(0.6)
+    if shot:
+        page.screenshot(path=str(shot), quality=85, type="jpeg")
+    page.click("#confirm-run")
+    page.wait_for_function("!document.querySelector('dialog#confirm').open", timeout=20000)
+    time.sleep(0.6)
+
+
 def main(base: str, out: Path) -> None:
     out.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as pw:
@@ -26,6 +38,11 @@ def main(base: str, out: Path) -> None:
         ctx = browser.new_context(viewport={"width": 1440, "height": 900}, color_scheme="dark", device_scale_factor=1)
         page = ctx.new_page()
         page.goto(base)
+        page.wait_for_selector("#demo-users button", timeout=60000)
+        time.sleep(0.5)
+        page.screenshot(path=str(out / "b1-sign-in.jpg"), quality=85, type="jpeg")
+
+        page.click("#demo-users button:has-text('Alex')")
         page.wait_for_selector("#grid .ag-row", timeout=60000)
         time.sleep(1.0)
         page.screenshot(path=str(out / "b2-reconciliation-grid.jpg"), quality=85, type="jpeg")
@@ -38,21 +55,16 @@ def main(base: str, out: Path) -> None:
 
         items = page.evaluate("async () => (await (await fetch('/api/approvals')).json()).items")
         refund = next(i for i in items if i["proposal"]["type"] == "refund_capture")
-        page.click(f"#approvals-grid .ag-row[row-id='{refund['id']}'] [data-act='approve']")
-        page.wait_for_selector("dialog#confirm[open]")
-        page.fill("#confirm-by", "Owner")
-        time.sleep(0.6)
-        page.screenshot(path=str(out / "b3-approve-dialog.jpg"), quality=85, type="jpeg")
-        page.keyboard.press("Escape")
-
-        # one reminder approved and run, so the audit tab shows the whole trail
         reminder = next(i for i in items if i["proposal"]["type"] == "send_reminder")
-        page.click(f"#approvals-grid .ag-row[row-id='{reminder['id']}'] [data-act='approve']")
-        page.wait_for_selector("dialog#confirm[open]")
-        page.fill("#confirm-by", "Owner")
-        page.click("#confirm-run")
-        page.wait_for_function("!document.querySelector('dialog#confirm').open", timeout=20000)
-        time.sleep(0.8)
+        approve_in_dialog(page, refund["id"])    # Alex: first of two approvals, nothing runs
+        approve_in_dialog(page, reminder["id"])  # Alex: approved and run
+
+        # Sam gives the second approval: the dialog names Alex as the first approver
+        page.click("#switch-user")
+        page.wait_for_function("document.getElementById('who').textContent.includes('Sam')", timeout=20000)
+        page.wait_for_selector(f"#approvals-grid .ag-row[row-id='{refund['id']}'] [data-act='approve']", timeout=20000)
+        approve_in_dialog(page, refund["id"], shot=out / "b3-approve-dialog.jpg")
+
         page.click("nav.tabs button[data-tab='audit']")
         page.wait_for_selector("#audit-grid .ag-row", timeout=20000)
         time.sleep(1.0)
@@ -61,6 +73,8 @@ def main(base: str, out: Path) -> None:
         light = browser.new_context(viewport={"width": 1280, "height": 860}, color_scheme="light")
         lp = light.new_page()
         lp.goto(base)
+        lp.wait_for_selector("#demo-users button", timeout=60000)
+        lp.click("#demo-users button:has-text('Alex')")
         lp.wait_for_selector("#grid .ag-row", timeout=60000)
         time.sleep(1.0)
         lp.screenshot(path=str(out / "b5-light-1280.jpg"), quality=85, type="jpeg")

@@ -31,7 +31,7 @@ def test_no_enterprise_features_or_licence():
 
 def test_no_logos_or_external_images():
     assert "<img" not in HTML.lower()
-    assert "logo" not in HTML.lower()
+    assert not re.search(r"\blogos?\b", HTML.lower())  # (whole word: "/api/logout" is fine)
 
 
 def test_reconciliation_grid_columns_and_features():
@@ -140,3 +140,55 @@ def test_dialog_shows_the_stored_request_id():
     calls = HTML[HTML.index("function callsFor"):]
     calls = calls[:calls.index("\n}\n")]
     assert "it.request_id" in calls
+
+
+# ---------- P3: sign-in on the board ----------
+
+def _fn(name: str) -> str:
+    body = HTML[HTML.index(f"function {name}"):]
+    return body[:body.index("\n}\n")]
+
+
+def test_sign_in_screen_with_demo_buttons_and_a_password_form():
+    assert 'id="signin"' in HTML and 'id="signin-form"' in HTML
+    assert 'id="signin-user"' in HTML and 'type="password"' in HTML and 'autocomplete="current-password"' in HTML
+    for path in ("/api/me", "/api/login", "/api/demo-login", "/api/login-options", "/api/logout"):
+        assert path in HTML, path
+    assert 'id="demo-users"' in HTML and "Sign in as" in HTML
+    assert "python -m cashdesk.users add" in HTML  # how to get an account outside sample data
+
+
+def test_the_board_stays_hidden_until_signed_in():
+    assert '<div id="app" hidden>' in HTML
+    boot = _fn("boot")
+    assert "/api/me" in boot and "showSignin" in boot and "startBoard" in boot
+
+
+def test_who_is_signed_in_switch_user_and_sign_out():
+    assert 'id="who"' in HTML and 'id="switch-user"' in HTML and 'id="signout"' in HTML
+    assert "me.demo" in HTML and "me.can_write" in HTML  # switch for demo approvers; viewers see no write buttons
+
+
+def test_no_typed_approver_name_anywhere():
+    assert 'id="confirm-by"' not in HTML and "Approved by<input" not in HTML
+    handler = _fn("confirmAndRun")
+    assert "by," not in handler and "{ by" not in handler and "by:" not in handler
+    assert 'id="confirm-who"' in HTML and '"Approving"' in HTML and "as <strong>${esc(me.display_name)}</strong>" in HTML
+
+
+def test_second_approval_names_the_first_approver_and_stops_the_same_person():
+    oc = _fn("openConfirm")
+    assert "first_by_name" in oc and "me.username" in oc and "run.disabled = true" in oc
+
+
+def test_names_shown_are_display_names_and_escaped():
+    assert "first_by_name" in HTML and "decided_by_name" in HTML and "by_name" in HTML
+    assert "esc(me.display_name)" in HTML
+
+
+def test_every_data_call_goes_through_the_401_aware_fetch():
+    api_fetch = _fn("apiFetch")
+    assert "401" in api_fetch and "showSignin" in api_fetch
+    raw = re.findall(r'(?<![A-Za-z])fetch\("/api/(reconciliation|approvals|audit|sync|proposals|export)', HTML)
+    assert raw == [], raw
+    assert "apiFetch(url" in _fn("post")

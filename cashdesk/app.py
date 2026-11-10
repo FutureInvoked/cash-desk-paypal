@@ -177,8 +177,10 @@ def create_app(desk=None) -> FastAPI:
         return resp
 
     @app.get("/api/me")
-    def me(user: User = Depends(need_user)) -> dict:
-        return {"user": user.to_dict()}
+    def me(request: Request) -> dict:
+        # the board asks on every load: signed out is an answer, not an error
+        user = d().user_for(request.cookies.get(SESSION_COOKIE))
+        return {"user": user.to_dict() if user else None}
 
     @app.get("/api/reconciliation")
     def reconciliation(user: User = Depends(need_user)) -> dict:

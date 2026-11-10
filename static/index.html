@@ -109,6 +109,15 @@
   .chain.bad { color: var(--bad); background: var(--bad-bg); }
   .head-row code { font: 12px var(--mono); background: var(--surface-2); padding: 4px 8px; border-radius: 6px; word-break: break-all; }
   #audit-grid { height: calc(100vh - 330px); min-height: 360px; }
+  [hidden] { display: none !important; }
+  #signin { width: min(460px, calc(100% - 32px)); margin: 32px auto; padding: 22px 24px; background: var(--surface);
+            border: 1px solid var(--border); border-radius: 12px; }
+  #signin h2 { margin: 0 0 4px; font-size: 18px; }
+  .demo-users { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; }
+  .demo-users button { text-align: left; padding: 10px 12px; }
+  .or { color: var(--muted); font-size: 12px; margin: 16px 0 0; border-top: 1px solid var(--border); padding-top: 12px; }
+  #signin code { font: 12px var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .who { font-weight: 600; color: var(--text); }
   @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 900px) { .layout.open { grid-template-columns: minmax(0,1fr); } aside#detail { height: auto; } }
 </style>
@@ -117,18 +126,40 @@
 <header>
   <div>
     <h1>Cash Desk for PayPal</h1>
-    <div class="meta">
+    <div class="meta" id="meta" hidden>
       <span class="badge" id="mode">mode: …</span>
       <span class="badge" id="asof">as of …</span>
       <span class="badge" id="ai">AI: …</span>
     </div>
   </div>
-  <div class="header-actions">
+  <div class="header-actions" id="header-actions" hidden>
+    <span class="badge who" id="who" title="Signed in"></span>
+    <button id="switch-user" hidden title="The two-person rule needs two different people">Switch user</button>
+    <button id="signout">Sign out</button>
     <a class="button" id="export-journal" href="/api/export/journal.csv" download
        title="One balanced journal entry per PayPal payment and refund, for your accounting system">Export journal (CSV)</a>
     <button class="primary" id="sync">Re-sync PayPal</button>
   </div>
 </header>
+<p class="state" id="booting">Loading…</p>
+<section id="signin" hidden aria-labelledby="signin-title">
+  <h2 id="signin-title">Sign in</h2>
+  <p class="sub" id="signin-mode"></p>
+  <p class="error" id="signin-msg" role="alert"></p>
+  <div id="demo-signin" hidden>
+    <p>Two demo approvers, so you can try the two-person rule on a large refund:</p>
+    <div class="demo-users" id="demo-users"></div>
+    <p class="or">Or sign in with an account:</p>
+  </div>
+  <form id="signin-form">
+    <label class="field">Username<input id="signin-user" autocomplete="username" required maxlength="64"></label>
+    <label class="field">Password<input id="signin-pass" type="password" autocomplete="current-password" required maxlength="256"></label>
+    <div class="actions"><button class="primary" type="submit" id="signin-submit">Sign in</button></div>
+  </form>
+  <p class="sub">No account yet? On the server, run <code>python -m cashdesk.users add &lt;username&gt; --name "Your Name"</code>
+    (it asks for a password).</p>
+</section>
+<div id="app" hidden>
 <div class="banner" id="banner" role="alert" hidden></div>
 <section class="kpis" aria-label="Summary">
   <div class="kpi"><div class="kpi-label">Payments matched</div><div class="kpi-value" id="kpi-matched">…</div><div class="kpi-sub" id="kpi-matched-sub"></div></div>
@@ -168,7 +199,7 @@
       <div id="confirm-policy"></div>
       <div id="confirm-two"></div>
       <label class="field" id="confirm-note-wrap">Note (optional)<input id="confirm-note" maxlength="500"></label>
-      <label class="field">Approved by<input id="confirm-by" value="owner" required maxlength="80"></label>
+      <p class="sub" id="confirm-who"></p>
       <p id="confirm-error" class="error" role="alert"></p>
       <div class="actions">
         <button type="button" id="confirm-cancel">Cancel</button>
@@ -186,6 +217,7 @@
     <div id="audit-grid" role="region" aria-label="Audit log"></div>
   </section>
 </main>
+</div>
 <script>
 // the grid comes from a CDN: if it didn't load (offline, blocked), say so instead of a blank page
 if (!window.agGrid) {
@@ -222,6 +254,109 @@ const ORDER = Object.keys(STATUS);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money = m => m ? `${Number(m.value).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${m.currency}` : "";
 const pill = st => { const s = STATUS[st] || { label: st, tone: "neutral" }; return `<span class="pill tone-${s.tone}">${esc(s.label)}</span>`; };
+
+// ---------- who is signed in ----------
+let me = null;
+// every data call: a 401 means the session ended (8 h idle, 24 h in all, or signed out elsewhere)
+async function apiFetch(url, opts) {
+  const r = await fetch(url, opts);
+  if (r.status === 401) {
+    const was = me;
+    showSignin(was ? "Your session has ended. Sign in again." : "");
+    throw new Error("signed out");
+  }
+  return r;
+}
+
+async function boot() {
+  let r;
+  try { r = await fetch("/api/me"); }
+  catch (e) { showSignin(`Could not reach the Cash Desk server (${e.message}). Is it running? Start it with "make demo".`); return; }
+  if (!r.ok) { showSignin(`The server answered HTTP ${r.status}.`); return; }
+  me = (await r.json()).user;
+  if (me) startBoard(); else showSignin("");
+}
+
+async function showSignin(msg) {
+  me = null;
+  document.getElementById("booting").hidden = true;
+  document.getElementById("app").hidden = true;
+  document.getElementById("meta").hidden = true;
+  document.getElementById("header-actions").hidden = true;
+  const dlg = document.getElementById("confirm");
+  if (dlg.open) dlg.close();
+  document.getElementById("signin").hidden = false;
+  document.getElementById("signin-msg").textContent = msg || "";
+  try {
+    const [h, o] = await Promise.all([fetch("/api/health").then(r => r.json()), fetch("/api/login-options").then(r => r.json())]);
+    document.getElementById("signin-mode").textContent = h.paypal_mode === "fixtures"
+      ? "Sample data: nothing is sent to PayPal." : `PayPal ${h.paypal_mode}: approved actions call PayPal.`;
+    const demo = o.demo_users || [], box = document.getElementById("demo-users");
+    document.getElementById("demo-signin").hidden = !demo.length;
+    box.textContent = "";
+    for (const u of demo) {
+      const b = document.createElement("button");
+      b.className = "primary"; b.textContent = `Sign in as ${u.display_name}`;
+      b.onclick = () => signIn("/api/demo-login", { username: u.username });
+      box.appendChild(b);
+    }
+    (box.querySelector("button") || document.getElementById("signin-user")).focus();
+  } catch (e) {
+    document.getElementById("signin-msg").textContent = `Could not reach the Cash Desk server (${e.message}).`;
+  }
+}
+
+async function signIn(url, body) {
+  const msg = document.getElementById("signin-msg");
+  msg.textContent = "";
+  let r;
+  try {
+    r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (e) { msg.textContent = `Could not reach the Cash Desk server (${e.message}).`; return false; }
+  if (!r.ok) {
+    msg.textContent = r.status === 401 ? "Wrong username or password." :
+      r.status === 429 ? "Too many attempts. Wait a few minutes, then try again." : `Sign-in failed (HTTP ${r.status}).`;
+    return false;
+  }
+  me = (await r.json()).user;
+  document.getElementById("signin-pass").value = "";
+  startBoard();
+  return true;
+}
+
+async function signOut(msg) {
+  try { await fetch("/api/logout", { method: "POST" }); } catch (e) { /* the cookie still goes */ }
+  showSignin(msg || "Signed out.");
+}
+
+async function startBoard() {
+  document.getElementById("booting").hidden = true;
+  document.getElementById("signin").hidden = true;
+  document.getElementById("app").hidden = false;
+  document.getElementById("meta").hidden = false;
+  document.getElementById("header-actions").hidden = false;
+  const who = document.getElementById("who");
+  who.innerHTML = `${esc(me.display_name)} <span class="sub">· ${esc(me.role)}</span>`;
+  who.title = `Signed in as ${me.username}`;
+  // viewers look; approvers act
+  document.getElementById("sync").hidden = !me.can_write;
+  document.getElementById("propose").hidden = !me.can_write;
+  // demo approvers: one click to the other one, to show the two-person rule
+  const sw = document.getElementById("switch-user");
+  sw.hidden = true;
+  if (me.demo) {
+    try {
+      const o = await (await fetch("/api/login-options")).json();
+      const other = (o.demo_users || []).find(u => u.username !== me.username);
+      if (other) {
+        sw.textContent = `Switch to ${other.display_name}`;
+        sw.onclick = () => signIn("/api/demo-login", { username: other.username });
+        sw.hidden = false;
+      }
+    } catch (e) { /* no switch button */ }
+  }
+  load(); loadApprovals(); loadAudit();
+}
 
 // ---------- state ----------
 let data = null, gridApi = null;
@@ -362,8 +497,11 @@ async function load() {
   setLoading(true);
   try {
     let r;
-    try { r = await fetch("/api/reconciliation"); }
-    catch (e) { throw new Error(`Could not reach the Cash Desk server (${e.message}). Is it running? Start it with "make demo".`); }
+    try { r = await apiFetch("/api/reconciliation"); }
+    catch (e) {
+      if (!me) return;  // signed out: the sign-in screen is showing
+      throw new Error(`Could not reach the Cash Desk server (${e.message}). Is it running? Start it with "make demo".`);
+    }
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       throw new Error(typeof j.detail === "string" ? j.detail : `The server answered HTTP ${r.status}.`);
@@ -406,11 +544,11 @@ function renderSummary(sm) {
   document.getElementById("kpi-pending").textContent = sm.pending_actions;
 }
 async function loadSummary() {
-  try { const r = await fetch("/api/reconciliation"); if (r.ok) renderSummary((await r.json()).summary); } catch (e) { /* tiles keep last value */ }
+  try { const r = await apiFetch("/api/reconciliation"); if (r.ok) renderSummary((await r.json()).summary); } catch (e) { /* tiles keep last value */ }
 }
 
 // ---------- audit ----------
-const AUDIT_TONE = { enqueued: "info", approved: "info", executing: "neutral", executed: "ok", failed: "bad",
+const AUDIT_TONE = { enqueued: "info", first_approval: "info", approved: "info", executing: "neutral", executed: "ok", failed: "bad",
   rejected: "neutral", blocked: "bad", expired: "neutral" };
 let auditApi = null;
 const auditCols = [
@@ -422,7 +560,7 @@ const auditCols = [
   { field: "amount", headerName: "Amount", width: 120, type: "rightAligned", cellClass: "num",
     valueFormatter: p => p.value ? money({ value: p.value.value, currency: p.value.currency_code }) : "" },
   { field: "request_id", headerName: "PayPal-Request-Id", width: 170, cellClass: "num" },
-  { field: "by", headerName: "By", width: 100 },
+  { field: "by", headerName: "By", width: 150, valueGetter: p => p.data.by_name || p.data.by || "" },
   { headerName: "Detail", flex: 1, minWidth: 200, tooltipValueGetter: p => p.value,
     valueGetter: p => p.data.note || (p.data.violations || []).map(v => v.message).join("; ") || p.data.error ||
       (p.data.result ? JSON.stringify(p.data.result) : "") },
@@ -432,7 +570,7 @@ const auditCols = [
 async function loadAudit() {
   const banner = document.getElementById("chain-status");
   try {
-    const r = await fetch("/api/audit");
+    const r = await apiFetch("/api/audit");
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const a = await r.json(), v = a.verify;
     banner.className = "chain " + (v.ok ? "ok" : "bad");
@@ -469,14 +607,16 @@ ActionsRenderer.prototype.init = function (p) {
   const it = p.data;
   this.e = document.createElement("div");
   this.e.className = "row-actions";
-  if (it.status === "pending" || it.status === "awaiting_second") {
+  if (!me || !me.can_write) {
+    this.e.innerHTML = `<span class="sub">view only</span>`;
+  } else if (it.status === "pending" || it.status === "awaiting_second") {
     const label = it.status === "awaiting_second" ? "2nd approval…" : "Approve…";
     this.e.innerHTML = `<button class="primary" data-act="approve">${label}</button><button class="danger" data-act="reject">Reject…</button>`;
   } else if (it.status === "approved" || it.status === "failed" || stuck(it)) {
     this.e.innerHTML = `<button class="primary" data-act="retry">${it.status === "approved" ? "Run" : "Retry"}…</button>` +
       (it.status === "approved" && !it.started_at ? `<button class="danger" data-act="reject">Reject…</button>` : "");
   } else {
-    const who = [it.first_by, it.decided_by].filter(Boolean).join(" + ");
+    const who = [it.first_by_name, it.decided_by_name].filter(Boolean).join(" + ");
     this.e.innerHTML = `<span class="sub">${esc(who ? "by " + who : "")}</span>`;
   }
   this.e.querySelectorAll("button").forEach(b => b.onclick = () => openConfirm(it, b.dataset.act));
@@ -527,11 +667,11 @@ function openConfirm(it, act) {
     ? '<p class="sub">Policy check: <span class="pill tone-ok">passes</span> (checked again right before the call)</p>'
     : `<p class="sub">Policy check failed:</p><ul class="violations">${v.map(x => `<li>${esc(x.message)}</li>`).join("")}</ul>`;
   document.getElementById("confirm-two").innerHTML = !two ? "" : second
-    ? `<p class="two"><strong>Two-person rule:</strong> first approved by <strong>${esc(it.first_by)}</strong>. A different person must approve now; the call runs right after.</p>`
+    ? `<p class="two"><strong>Two-person rule:</strong> first approved by <strong>${esc(it.first_by_name || it.first_by)}</strong>. A different person must approve now; the call runs right after.</p>`
     : `<p class="two"><strong>Two-person rule:</strong> refunds above 500.00 need two different people. Your approval is recorded, and nothing runs until a second person approves.</p>`;
-  const byInput = document.getElementById("confirm-by");
-  byInput.value = second ? "" : "owner";
-  byInput.placeholder = second ? `someone other than ${it.first_by}` : "";
+  const verb = reject ? "Rejecting" : (act === "retry" ? "Running" : "Approving");
+  document.getElementById("confirm-who").innerHTML = `${verb} as <strong>${esc(me.display_name)}</strong>`;
+  const mine = second && it.first_by === `user:${me.username}`;
   document.getElementById("confirm-note-wrap").style.display = reject ? "" : "none";
   document.getElementById("confirm-note").value = "";
   document.getElementById("confirm-error").textContent = "";
@@ -539,11 +679,18 @@ function openConfirm(it, act) {
   run.textContent = reject ? "Reject" : (act === "retry" ? "Run now" : (two && !second ? "Approve (1 of 2)" : "Approve and run"));
   run.className = reject ? "danger" : "primary";
   run.disabled = false;
+  if (mine) {
+    // the server refuses it too; say why before anyone clicks
+    const sw = document.getElementById("switch-user");
+    document.getElementById("confirm-error").textContent = "You gave the first approval, so someone else must give the second. " +
+      (me.demo && !sw.hidden ? `Use “${sw.textContent}” at the top right.` : "Sign out and let the second approver sign in.");
+    run.disabled = true;
+  }
   document.getElementById("confirm").showModal();
 }
 
 async function post(url, body) {
-  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+  const r = await apiFetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
@@ -555,22 +702,22 @@ async function post(url, body) {
 }
 
 async function confirmAndRun() {
-  const { it, act } = current, by = document.getElementById("confirm-by").value.trim();
+  const { it, act } = current;
   const err = document.getElementById("confirm-error"), run = document.getElementById("confirm-run");
-  if (!by) { err.textContent = "Enter who is approving."; return; }
   run.disabled = true; err.textContent = "";
   try {
     if (act === "reject") {
-      await post(`/api/approvals/${it.id}/reject`, { by, note: document.getElementById("confirm-note").value || null });
+      await post(`/api/approvals/${it.id}/reject`, { note: document.getElementById("confirm-note").value || null });
     } else {
       let state = it.status;
       // the fingerprint of the proposal on screen: the server refuses if the stored one differs
-      if (act === "approve") state = (await post(`/api/approvals/${it.id}/approve`, { by, proposal_hash: it.proposal_hash })).status;
+      if (act === "approve") state = (await post(`/api/approvals/${it.id}/approve`, { proposal_hash: it.proposal_hash })).status;
       // first of two approvals: recorded, nothing runs until a different person approves
       if (state !== "awaiting_second") await post(`/api/approvals/${it.id}/execute`);
     }
     document.getElementById("confirm").close();
   } catch (e) {
+    if (!me) return;  // the session ended: the sign-in screen is showing
     err.textContent = e.message; run.disabled = false;
   }
   await loadApprovals();
@@ -580,7 +727,7 @@ async function confirmAndRun() {
 
 async function loadApprovals() {
   try {
-    const r = await fetch("/api/approvals");
+    const r = await apiFetch("/api/approvals");
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     approvals = (await r.json()).items.slice().reverse();
     approvalsApi.setGridOption("rowData", approvals);
@@ -621,12 +768,16 @@ document.addEventListener("DOMContentLoaded", () => {
     catch (e) { b.textContent = "Copy failed"; }
     setTimeout(() => b.textContent = "Copy", 1500);
   };
-  loadAudit();
   document.getElementById("confirm-run").onclick = confirmAndRun;
   // Esc closes the native <dialog>; either way, focus goes back to the button that opened it
   document.getElementById("confirm").addEventListener("close", () => { if (lastFocus && lastFocus.isConnected) lastFocus.focus(); });
   document.getElementById("confirm-cancel").onclick = () => document.getElementById("confirm").close();
-  loadApprovals();
+  document.getElementById("signin-form").addEventListener("submit", e => {
+    e.preventDefault();
+    signIn("/api/login", { username: document.getElementById("signin-user").value.trim(),
+                           password: document.getElementById("signin-pass").value });
+  });
+  document.getElementById("signout").onclick = () => signOut();
 
   gridApi = agGrid.createGrid(document.getElementById("grid"), gridOptions);
   document.getElementById("search").addEventListener("input", e => { gridApi.setGridOption("quickFilterText", e.target.value); gridApi.onFilterChanged(); });
@@ -634,7 +785,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("sync").onclick = async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/sync", { method: "POST" });
+      const r = await apiFetch("/api/sync", { method: "POST" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
     } catch (e) {
       setLoading(false);
@@ -650,7 +801,7 @@ document.addEventListener("DOMContentLoaded", () => {
     [gridApi, approvalsApi, auditApi].forEach(api => api.refreshCells({ force: true }));
     if (b.dataset.tab === "audit") loadAudit();
   });
-  load();
+  boot();
 });
 </script>
 </body>

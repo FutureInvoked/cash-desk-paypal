@@ -159,7 +159,7 @@ WRITES = [("post", "/api/sync"), ("post", "/api/proposals/refresh"),
           ("post", "/api/approvals/q00001/approve"), ("post", "/api/approvals/q00001/reject"),
           ("post", "/api/approvals/q00001/execute")]
 READS = [("get", "/api/reconciliation"), ("get", "/api/approvals"), ("get", "/api/audit"),
-         ("get", "/api/export/journal.csv"), ("get", "/api/me")]
+         ("get", "/api/export/journal.csv")]
 
 
 def test_everything_but_health_login_and_the_page_needs_a_session(api):
@@ -180,7 +180,13 @@ def test_login_sets_a_strict_httponly_cookie_and_me_logout_work(api, desk):
     assert "secure" not in cookie  # plain http on localhost
     assert api.get("/api/me").json()["user"]["username"] == "alice"
     assert api.post("/api/logout").status_code == 200
-    assert api.get("/api/me").status_code == 401
+    assert api.get("/api/me").json() == {"user": None}
+
+
+def test_me_answers_signed_out_without_an_error(api):
+    """The board asks on every load; a signed-out visitor is normal, not a 401 in the console."""
+    r = api.get("/api/me")
+    assert r.status_code == 200 and r.json() == {"user": None}
 
 
 def test_cookie_is_secure_over_https(desk):
