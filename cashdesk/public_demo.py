@@ -8,9 +8,11 @@ dropped after 2 hours idle and on "Reset demo", and one address can only open so
 Every address is held to a request rate. Settings: CASHDESK_DEMO_MAX_WORKSPACES (50),
 CASHDESK_DEMO_IDLE_MINUTES (120), CASHDESK_DEMO_NEW_PER_HOUR (10), CASHDESK_DEMO_RATE (per minute, 120).
 
-Behind Render's proxy (CASHDESK_BEHIND_PROXY=1) the client is the rightmost X-Forwarded-For entry,
-the one Render's proxy appended, so a visitor can't pick their own address; the scheme comes from
-X-Forwarded-Proto. Without the flag both headers are ignored.
+Behind Render's proxy (CASHDESK_BEHIND_PROXY=1) the client is CF-Connecting-IP (Cloudflare, which
+fronts Render, sets and overwrites it), else True-Client-IP, else the rightmost X-Forwarded-For entry.
+On Render X-Forwarded-For reads "<client>, <Cloudflare edge>": the left part can be sent by anyone and
+the right part is an edge shared by many visitors, so neither may key per-address limits. The scheme
+comes from X-Forwarded-Proto. Without the flag all of these headers are ignored.
 """
 
 from __future__ import annotations
@@ -209,7 +211,8 @@ class DemoGate:
 
 
 class ProxyHeaders:
-    """Behind Render's proxy: client = rightmost X-Forwarded-For, scheme = X-Forwarded-Proto."""
+    """Behind Render's proxy: client = CF-Connecting-IP, else True-Client-IP, else the rightmost
+    X-Forwarded-For entry; scheme = X-Forwarded-Proto."""
 
     def __init__(self, app):
         self.app = app
@@ -219,9 +222,11 @@ class ProxyHeaders:
             headers = {k.lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
             xff = [p.strip() for p in headers.get(b"x-forwarded-for", "").split(",") if p.strip()]
             proto = (headers.get(b"x-forwarded-proto", "").split(",")[-1]).strip().lower()
+            client = (headers.get(b"cf-connecting-ip", "").strip() or headers.get(b"true-client-ip", "").strip()
+                      or (xff[-1] if xff else ""))
             scope = dict(scope)
-            if xff:
-                scope["client"] = (xff[-1], 0)
+            if client:
+                scope["client"] = (client[:64], 0)
             if proto in ("http", "https"):
                 scope["scheme"] = proto
         await self.app(scope, receive, send)

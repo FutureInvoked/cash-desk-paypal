@@ -197,6 +197,32 @@ def test_the_rightmost_forwarded_address_is_the_client(env):
     assert codes == [200, 200, 200, 429]
 
 
+def test_on_render_the_client_is_cloudflares_connecting_ip(env):
+    """On Render, X-Forwarded-For is "<client>, <Cloudflare edge>": the last entry is an edge shared by
+    many visitors, so per-address limits would become shared limits. Cloudflare sets (and overwrites)
+    CF-Connecting-IP; that is the client."""
+    app = make(env, CASHDESK_BEHIND_PROXY="1", RENDER_EXTERNAL_HOSTNAME=HOST, CASHDESK_DEMO_RATE="3")
+    edge = "104.22.17.40"
+
+    def via_cloudflare(client, spoof="10.0.0.1"):
+        return TestClient(app, base_url=f"http://{HOST}", headers={
+            "X-Forwarded-Proto": "https", "X-Forwarded-For": f"{spoof}, {client}, {edge}",
+            "CF-Connecting-IP": client})
+    # five visitors behind the same edge each get their own budget
+    assert [via_cloudflare(f"198.51.100.{n}").get("/api/login-options").status_code for n in range(5)] == [200] * 5
+    # one visitor can't refresh their budget by changing the X-Forwarded-For they send
+    codes = [via_cloudflare("203.0.113.9", spoof=f"10.0.0.{n}").get("/api/login-options").status_code for n in range(4)]
+    assert codes == [200, 200, 200, 429]
+
+
+def test_true_client_ip_is_used_when_cf_connecting_ip_is_missing(env):
+    app = make(env, CASHDESK_BEHIND_PROXY="1", RENDER_EXTERNAL_HOSTNAME=HOST, CASHDESK_DEMO_RATE="2")
+    edge = "104.22.17.40"
+    c = lambda ip: TestClient(app, base_url=f"http://{HOST}", headers={  # noqa: E731
+        "X-Forwarded-Proto": "https", "X-Forwarded-For": f"{ip}, {edge}", "True-Client-IP": ip})
+    assert [c(f"198.51.100.{n}").get("/api/login-options").status_code for n in range(3)] == [200] * 3
+
+
 def test_without_the_proxy_flag_forwarded_headers_are_ignored(env):
     app = make(env, CASHDESK_ALLOWED_HOSTS=HOST)
     r = proxied(app).post("/api/demo-login", json={"username": "alex"})
