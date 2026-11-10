@@ -330,7 +330,7 @@ tests/               pytest suite
 render.yaml          the hosted demo's Render settings (free plan, sample data, no keys)
 ```
 
-More screenshots: [approvals](docs/screenshots/b3-approvals-grid.jpg) ·
+More screenshots: [sign-in](docs/screenshots/b1-sign-in.jpg) · [approvals](docs/screenshots/b3-approvals-grid.jpg) ·
 [audit + summary](docs/screenshots/b4-audit-and-summary.jpg) ·
 [light mode](docs/screenshots/b5-light-1280.jpg)
 
