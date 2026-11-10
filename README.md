@@ -20,6 +20,8 @@ in a hash-chained audit log you can verify. One click exports a balanced journal
 3. Press **Switch to Sam (bookkeeper)** at the top and approve it again. Now it runs, and the
    **Audit log** shows Alex's and Sam's approvals with the hash chain intact.
 
+Or watch the 2-minute video: <https://www.youtube.com/watch?v=5Sc75bXU300>.
+
 Nothing is sent to PayPal and the server holds no keys. Your changes are private to your browser and
 reset after 2 hours idle (or with **Reset demo**). The free instance sleeps when nobody uses it, so
 the first visit can take up to a minute.
@@ -40,7 +42,7 @@ make demo          # installs into .venv, serves http://localhost:8000 with samp
 Other commands:
 
 ```bash
-make test          # ~590 tests: matcher, AI layer (mocked), policy, queue, audit, accounts, API, UI contract
+make test          # ~600 tests: matcher, AI layer (mocked), policy, queue, audit, accounts, API, UI contract
 make audit-verify  # verifies the hash chain of var/audit.jsonl
 make eval          # scores reconciliation against the expected outcomes in evals/match_eval.json
 ```

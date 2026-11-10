@@ -122,7 +122,7 @@ added real approver accounts and the hosted demo.
 - **Hosting:** Render's free plan, in a public-demo mode that refuses to start with any credential.
 - **Frontend:** a single HTML page with AG Grid Community 36.2.0 from a CDN. There is no build step,
   and light and dark themes are supported.
-- **Process:** built test-first. About 590 tests cover every reconciliation case, every policy rule
+- **Process:** built test-first. About 600 tests cover every reconciliation case, every policy rule
   (including attempts to bypass it), the queue lifecycle and audit tampering.
 
 ## Challenges we ran into
@@ -160,4 +160,4 @@ leave the last click to a person, with enough evidence that the click takes two 
 PayPal REST APIs (OAuth2, Transaction Search, Invoicing v2, Payments v2, Webhooks v1) · Claude (Anthropic SDK) or any OpenAI-compatible LLM API ·
 AG Grid Community · Python · FastAPI · SQLite · httpx · pytest
 
-**Licence:** MIT. **Repository:** https://github.com/FutureInvoked/cash-desk-paypal · **Video:** https://www.youtube.com/watch?v=8j6nuPuOKvo
+**Licence:** MIT. **Repository:** https://github.com/FutureInvoked/cash-desk-paypal · **Video:** https://www.youtube.com/watch?v=5Sc75bXU300
