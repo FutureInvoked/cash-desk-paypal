@@ -10,12 +10,27 @@ in a hash-chained audit log you can verify. One click exports a balanced journal
 
 ![Reconciliation grid](docs/screenshots/b2-reconciliation-grid.jpg)
 
-## Try it in one command (no keys needed)
+## Try it in 30 seconds
+
+**<https://cash-desk-paypal.onrender.com>**, the hosted demo on sample data:
+
+1. Press **Sign in as Alex (owner)**.
+2. Open **Approvals**, press **Propose actions**, then **Approve…** on the 800.00 duplicate refund.
+   It is the first of two approvals, so nothing runs yet.
+3. Press **Switch to Sam (bookkeeper)** at the top and approve it again. Now it runs, and the
+   **Audit log** shows Alex's and Sam's approvals with the hash chain intact.
+
+Nothing is sent to PayPal and the server holds no keys. Your changes are private to your browser and
+reset after 2 hours idle (or with **Reset demo**). The free instance sleeps when nobody uses it, so
+the first visit can take up to a minute.
+
+## Run it yourself in one command (no keys needed)
 
 ```bash
 make demo          # installs into .venv, serves http://localhost:8000 with sample data
 ```
 
+- Sign in with one click as **Alex** or **Sam**, two demo approvers that exist only on sample data.
 - Port 8000 busy? `make demo PORT=8010`.
 - Needs Python 3.11+ on macOS or Linux (the audit log uses POSIX file locks). It uses `uv` when
   installed, otherwise `venv` + `pip`.
@@ -25,7 +40,7 @@ make demo          # installs into .venv, serves http://localhost:8000 with samp
 Other commands:
 
 ```bash
-make test          # ~490 tests: matcher, AI layer (mocked), policy, queue, audit, API, UI contract
+make test          # ~590 tests: matcher, AI layer (mocked), policy, queue, audit, accounts, API, UI contract
 make audit-verify  # verifies the hash chain of var/audit.jsonl
 make eval          # scores reconciliation against the expected outcomes in evals/match_eval.json
 ```
@@ -35,11 +50,12 @@ make eval          # scores reconciliation against the expected outcomes in eval
 1. **Reconciliation** groups every payment and invoice by status, with exceptions first:
    duplicate, overpaid, partial, fee short, currency mismatch, unmatched, overdue and suggested match.
    Each row has a one-line reason that cites the PayPal fields it relies on. Click a row to see the evidence.
-2. **Approvals → Propose actions.** The agent proposes seven actions. **Approve…** shows exactly
+2. **Approvals → Propose actions** (signed in as Alex). The agent proposes seven actions. **Approve…** shows exactly
    which sandbox call will run: method, full URL, JSON body and `PayPal-Request-Id`. The action
    runs only after you confirm. **Reject…** takes a note.
    - The 800.00 duplicate refund is above the two-person threshold: the first approval is only
-     recorded ("Needs a 2nd approver"), and it runs after a different person approves.
+     recorded ("Needs a 2nd approver"). Alex can't give the second one; press **Switch to Sam**
+     and approve it again, and it runs.
    - The 45.00 overpayment on NW-1014 gets a partial refund of exactly the overpaid amount.
 3. **Audit log** shows every proposal, approval, rejection and PayPal call, plus a banner that
    verifies the hash chain and the head hash to copy elsewhere.
@@ -151,7 +167,9 @@ The AI layer is in `cashdesk/ai.py`, with the prompt in `cashdesk/prompts/reconc
 | Approval queue | A human approves or rejects each action. The policy runs again at approval and again right before the PayPal call, against the proposal as stored. Rejected, expired, blocked or unapproved items never execute (tested). | `cashdesk/queue.py` |
 | Two-person rule | Refunds above 500.00 need two different approvers. The first approval is only recorded; the second must come from someone else, and the executor refuses to run a large refund that lacks two distinct approvers even if the database is edited. The threshold is set in `PolicyConfig` (`None` turns it off). Approvers are signed-in accounts (`python -m cashdesk.users add`; on sample data two demo approvers, Alex and Sam, sign in with one click), and the rule compares accounts: the same account in a second browser is still one person, and a name typed into an older version never counts. | `cashdesk/policy.py`, `cashdesk/queue.py`, `cashdesk/users.py` |
 | What runs is what you approved | The executor sends each proposal's stored calls exactly as the dialog showed them (method, path, JSON body). The approve request carries the fingerprint of the proposal on screen, and nothing is approved if the stored one differs. The fingerprint is checked again before it runs and between the two approvals. Before running, the hash-chained audit log must also show that the item's latest state is that approval (no later reject, expiry or finished run) and the approval(s) of that exact fingerprint and request id by the people the queue names, so editing the queue database alone can't approve or replay anything. Limits are re-read from the latest sync for every action (an invoice paid meanwhile drops its reminder). A full hour or a clock that moved refuses a step without blocking the item, and nothing waits past 24 hours. Approve, reject and run each read, check and write in one database transaction, so a reject can't be overwritten by an approval in flight and two simultaneous runs can't both start. | `cashdesk/queue.py` |
-| Local board only | The board answers only on localhost (a foreign Host header, as in DNS rebinding, gets 400) and takes writes only as JSON from its own exact origin: another local port or scheme is another site (403). It can't be framed, and it serves no API docs. `CASHDESK_ALLOWED_HOSTS` adds hosts. | `cashdesk/app.py` |
+| Accounts | Every page but sign-in needs a session; writes need an approver. Passwords are salted scrypt; sessions are HttpOnly, SameSite=Strict cookies (Secure over HTTPS) that end after 8 hours idle or 24 in all; five wrong passwords wait 15 minutes. The approver recorded in the queue and the audit log is the signed-in account, never a typed name. | `cashdesk/users.py`, `cashdesk/app.py` |
+| Known hosts only | The board answers only on localhost and the hosts you name (a foreign Host header, as in DNS rebinding, gets 400) and takes writes only as JSON from its own exact origin: another port or scheme is another site (403). It can't be framed, and it serves no API docs. `CASHDESK_ALLOWED_HOSTS` adds hosts; on Render its own host name is added. | `cashdesk/app.py` |
+| Public demo | Sample data only, no credentials (it refuses to start with one), a private workspace per visitor, request and workspace limits per address. | `cashdesk/public_demo.py` |
 | Idempotency | Every call carries `PayPal-Request-Id: cashdesk-<item>-<random>`, fixed when the action is queued and shown in the dialog, so a reinstall or a second desk never reuses one. A run PayPal may have acted on (a lost reply, a 5xx, a crash) is only retried with its own id: it never expires and isn't re-checked against limits, so it never refunds twice. A run PayPal provably refused (a 4xx, or no connection) counts as never started: it is checked again from scratch, and can be rejected. An executed item returns its stored result. On a retry, a record-payment first reads the invoice, and a draft invoice reuses the one already created (its id is saved at once, or found by its memo); a reminder may be sent twice if the reply to the first was lost, since PayPal has nothing to check it against. | `cashdesk/queue.py` |
 | Audit | Append-only JSONL. Each record holds the sha256 of its canonical JSON and the previous hash, and a head pointer catches truncation. Each record is written inside the database transaction of the queue change it describes, before it commits (if the write fails, the change is rolled back). The head names the one record being written, so a crash mid-write (a cut-off last line, or the head one record behind) verifies and is repaired by the next write, while a record added by hand does not. `make audit-verify` reports the first bad record. Secret-looking fields are redacted. | `cashdesk/audit.py` |
 | Sandbox only | The client refuses any base URL other than `api-m.sandbox.paypal.com` | `cashdesk/config.py` |
@@ -278,6 +296,13 @@ Sandbox notes:
 - **Restore:** stop the board, move `var/` aside, `python -m cashdesk.backup restore DIR` (it fills only an
   empty data folder and checks the backup first), start the board, and look at the audit tab.
 - **Health:** `GET /api/health` reports the mode, version and commit, for uptime checks.
+- **Hosting a public demo:** `CASHDESK_PUBLIC_DEMO=1` (see `render.yaml`, used for the hosted demo).
+  The server refuses to start with any PayPal or AI key, or outside sample data. Each visitor gets a
+  private workspace (own database, audit log and demo approvers) opened by the one-click sign-in;
+  at most 50, dropped after 2 hours idle or on **Reset demo**; one address opens at most 10 an hour
+  and sends at most 120 requests a minute. Behind Render (`CASHDESK_BEHIND_PROXY=1`) the visitor's
+  address is Cloudflare's `CF-Connecting-IP`. A Render service made from a public repository URL
+  doesn't deploy on push: use **Manual Deploy**.
 
 ## What's new (hackathon period)
 
@@ -286,17 +311,23 @@ come from the author's earlier Cash Desk work: matching first, AI only suggests,
 The code was written fresh here, along with the PayPal integration, the policy-gated agent, the
 audit chain and the AG Grid board.
 
+After submitting (10 November): approver accounts behind the two-person rule, a sign-in screen, a
+hosted public demo with a private workspace per visitor, a sign-in throttle, startup checks, and a
+verified backup and restore.
+
 ## Project layout
 
 ```text
 cashdesk/            app code: models, paypal/ (interface, parser, fixture client), store, matcher,
-                     ai, actions, policy, queue, audit, service, app (FastAPI)
+                     ai, actions, policy, queue, audit, service, app (FastAPI), users (accounts),
+                     public_demo (hosted mode), backup, config (settings check)
 static/index.html    the board: AG Grid Community 36.2.0 from jsdelivr, no build step
 fixtures/            Northwind Studio sample data in PayPal's response shapes, plus cases.json
 evals/               expected outcomes for make eval
 tools/               fixture generator, spec key extractor, eval runner
 docs/                PayPal API notes, screenshots
 tests/               pytest suite
+render.yaml          the hosted demo's Render settings (free plan, sample data, no keys)
 ```
 
 More screenshots: [approvals](docs/screenshots/b3-approvals-grid.jpg) ·
