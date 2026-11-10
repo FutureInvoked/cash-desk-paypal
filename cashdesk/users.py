@@ -32,6 +32,10 @@ ROLES = ("admin", "approver", "viewer")
 WRITE_ROLES = ("admin", "approver")
 IDLE_TTL = timedelta(hours=8)
 ABSOLUTE_TTL = timedelta(hours=24)
+# five wrong passwords for one username, or from one address, wait 15 minutes (stored in SQLite, so
+# a restart or a second process doesn't reset it)
+MAX_FAILURES = 5
+FAILURE_WINDOW = timedelta(minutes=15)
 MIN_PASSWORD = 10
 USERNAME = re.compile(r"^[a-z0-9][a-z0-9._-]{1,31}$")
 SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1}
@@ -56,6 +60,11 @@ create table if not exists sessions (
     created_at text not null,
     last_seen text not null
 );
+create table if not exists login_failures (
+    key text not null,
+    at text not null
+);
+create index if not exists login_failures_key on login_failures (key, at);
 """
 
 
@@ -217,6 +226,31 @@ class UserStore:
         if not row or not ok or row["disabled"] or row["demo"]:
             return None
         return self._user(row)
+
+    # ---- sign-in throttle ----
+    @staticmethod
+    def _keys(username: str, ip: str | None) -> list[str]:
+        keys = [f"user:{(username or '').strip().lower()[:64]}"]
+        if ip:
+            keys.append(f"ip:{ip}")
+        return keys
+
+    def login_blocked(self, username: str, ip: str | None) -> bool:
+        since = _iso(self.clock() - FAILURE_WINDOW)
+        with self._conn() as con:
+            return any(con.execute("select count(*) from login_failures where key = ? and at > ?", (k, since)).fetchone()[0]
+                       >= MAX_FAILURES for k in self._keys(username, ip))
+
+    def login_failed(self, username: str, ip: str | None) -> None:
+        now = self.clock()
+        with self._conn() as con:
+            con.execute("delete from login_failures where at <= ?", (_iso(now - FAILURE_WINDOW),))
+            con.executemany("insert into login_failures (key, at) values (?, ?)",
+                            [(k, _iso(now)) for k in self._keys(username, ip)])
+
+    def login_succeeded(self, username: str) -> None:
+        with self._conn() as con:
+            con.execute("delete from login_failures where key = ?", (self._keys(username, None)[0],))
 
     # ---- sessions ----
     def create_session(self, username: str) -> str:

@@ -13,11 +13,13 @@ test ! -e .env || { echo "FAIL: .env is tracked"; exit 1; }
 CLEAN="env -u PAYPAL_CLIENT_ID -u PAYPAL_CLIENT_SECRET -u PAYPAL_MODE -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u AI_API_KEY -u AI_PROVIDER -u AI_MODEL -u AI_BASE_URL -u AI_TIMEOUT -u CODEX_BIN -u CASHDESK_VAR_DIR -u CASHDESK_AS_OF"
 $CLEAN make test
 make -n demo >/dev/null   # the demo target resolves
+$CLEAN .venv/bin/python -m cashdesk.config   # startup checks pass with no keys
 $CLEAN .venv/bin/python - <<'PY'
 from fastapi.testclient import TestClient
 from cashdesk.app import create_app
 c = TestClient(create_app(), base_url="http://127.0.0.1:8000")  # a real board host
-h = c.get("/api/health").json(); assert h == {"status": "ok", "paypal_mode": "fixtures", "version": h["version"]}, h
+h = c.get("/api/health").json(); assert h == {"status": "ok", "paypal_mode": "fixtures", "version": h["version"], "commit": h["commit"]}, h
+assert len(h["commit"]) == 12, h  # the clone's own commit, from git
 assert c.get("/api/reconciliation").status_code == 401  # signed out
 demo = [u["username"] for u in c.get("/api/login-options").json()["demo_users"]]; assert demo == ["alex", "sam"], demo
 assert c.post("/api/demo-login", json={"username": "alex"}).status_code == 200
@@ -39,4 +41,5 @@ assert "Cash Desk for PayPal" in c.get("/").text
 print("SMOKE OK: health, demo sign-in, 26/26 rows, 7 proposals, two-person refund (Alex then Sam) executed, journal export, audit chain of 11 verified")
 PY
 $CLEAN make audit-verify
+$CLEAN make backup
 echo "FRESH CLONE OK ($TMP, removed on exit)"

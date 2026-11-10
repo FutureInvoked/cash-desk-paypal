@@ -16,6 +16,23 @@ SESSION_COOKIE = "cashdesk_session"
 BAD_LOGIN = "wrong username or password"
 
 
+def build_commit() -> str:
+    """The commit this server runs: Render's RENDER_GIT_COMMIT, CASHDESK_COMMIT, or git; 12 hex digits."""
+    import os
+    import re
+    import subprocess
+    for var in ("CASHDESK_COMMIT", "RENDER_GIT_COMMIT"):
+        v = (os.environ.get(var) or "").strip().lower()
+        if re.fullmatch(r"[0-9a-f]{7,40}", v):
+            return v[:12]
+    try:
+        out = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+                             timeout=2, check=True).stdout.strip()
+        return out[:12] if re.fullmatch(r"[0-9a-f]{40}", out) else "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
 class Login(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=256)
@@ -55,9 +72,28 @@ def create_app(desk=None) -> FastAPI:
 
     from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+    import logging
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        # a bad setting stops the server here, with a message naming it, instead of failing later
+        from .config import check_startup
+        errors, warnings = check_startup()
+        log = logging.getLogger("cashdesk")
+        for w in warnings:
+            log.warning(w)
+        if errors:
+            msg = "Cash Desk can't start:\n" + "\n".join(f"  - {e}" for e in errors)
+            log.error(msg)
+            raise RuntimeError(msg)
+        yield
+
     # no interactive API docs: the board is the only client
-    app = FastAPI(title="Cash Desk for PayPal", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Cash Desk for PayPal", version=__version__, docs_url=None, redoc_url=None, openapi_url=None,
+                  lifespan=lifespan)
     hosts = allowed_hosts()
+    commit = build_commit()
 
     @app.middleware("http")
     async def same_origin_writes(request: Request, call_next):
@@ -146,7 +182,7 @@ def create_app(desk=None) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict:
         from .config import load_settings
-        return {"status": "ok", "paypal_mode": load_settings().paypal_mode, "version": __version__}
+        return {"status": "ok", "paypal_mode": load_settings().paypal_mode, "version": __version__, "commit": commit}
 
     @app.get("/api/login-options")
     def login_options() -> dict:
@@ -156,9 +192,14 @@ def create_app(desk=None) -> FastAPI:
 
     @app.post("/api/login")
     def login(body: Login, request: Request) -> JSONResponse:
-        user = d().users.authenticate(body.username, body.password)
+        users, ip = d().users, request.client.host if request.client else None
+        if users.login_blocked(body.username, ip):  # checked before the password: guessing gets nowhere
+            raise HTTPException(429, "too many failed sign-ins; try again in 15 minutes")
+        user = users.authenticate(body.username, body.password)
         if user is None:
+            users.login_failed(body.username, ip)
             raise HTTPException(401, BAD_LOGIN)
+        users.login_succeeded(user.username)
         return signed_in(request, user)
 
     @app.post("/api/demo-login")

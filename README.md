@@ -243,9 +243,12 @@ field for field, and a test walks every key.
 2. In the app's settings, enable **Invoicing** and **Transaction search**. Without them the token lacks those scopes, and Cash Desk says so.
 3. Copy `.env.example` to `.env` and fill in `PAYPAL_CLIENT_ID=` and `PAYPAL_CLIENT_SECRET=`.
    `.env` is gitignored, so never commit it.
-4. Run `make demo`. With keys present the mode defaults to `PAYPAL_MODE=sandbox`. Force sample data
+4. Add the people who approve (the demo approvers exist only on sample data). Each command asks for a
+   password: `make install`, then `.venv/bin/python -m cashdesk.users add alice --name "Alice Smith"`, and
+   a second person for refunds above 500.00. `python -m cashdesk.config` checks the settings.
+5. Run `make demo` and sign in. With keys present the mode defaults to `PAYPAL_MODE=sandbox`. Force sample data
    with `PAYPAL_MODE=fixtures make demo`.
-5. Optional, for live AI matching and reasons, add one of these:
+6. Optional, for live AI matching and reasons, add one of these:
    - `ANTHROPIC_API_KEY=` for Claude;
    - `AI_PROVIDER=codex` to use your ChatGPT plan through the Codex CLI (after `codex login`);
    - `AI_MODEL=`, `AI_API_KEY=` and, if it isn't OpenAI, `AI_BASE_URL=` for any OpenAI-compatible
@@ -258,6 +261,23 @@ Sandbox notes:
 - New transactions can take up to about 3 hours to appear in Transaction Search, so payments
   recorded on invoices are read from Invoicing as a second source.
 - Amounts are strings handled as `Decimal`, never floats.
+
+## Running it for real
+
+- **Accounts:** `python -m cashdesk.users add|list|disable|set-password` (roles `approver`, `viewer`,
+  `admin`; passwords from a prompt or stdin, never the command line, stored as salted scrypt).
+  Sessions end after 8 hours idle or 24 hours in all; disabling a user or changing a password ends theirs.
+  Five wrong passwords for one username, or from one address, wait 15 minutes.
+- **Settings check:** `python -m cashdesk.config`. The server runs the same check at start and refuses to
+  start with a message naming the bad setting (a sandbox without keys, an unknown `AI_PROVIDER`, a data
+  folder it can't write, a host name written as a URL).
+- **Backup:** `make backup` copies the database and the audit log to `var/backups/<time>` while the
+  board runs. It holds the database's write lock while it copies, so the copied audit log is never behind
+  the copied queue, verifies both, and writes a manifest of sha256 hashes. `python -m cashdesk.backup check DIR`
+  re-checks one later.
+- **Restore:** stop the board, move `var/` aside, `python -m cashdesk.backup restore DIR` (it fills only an
+  empty data folder and checks the backup first), start the board, and look at the audit tab.
+- **Health:** `GET /api/health` reports the mode, version and commit, for uptime checks.
 
 ## What's new (hackathon period)
 

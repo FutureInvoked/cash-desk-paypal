@@ -6,7 +6,7 @@ BIN := $(VENV)/bin
 WEBHOOK_PORT ?= 8001
 PORT ?= 8000
 
-.PHONY: install test demo run webhooks audit-verify eval lock secret-scan clean
+.PHONY: install test demo run webhooks audit-verify backup eval lock secret-scan clean
 
 $(BIN)/python:
 	@test -n "$(PY)" || { echo "Cash Desk needs Python 3.11 or newer on PATH (or run: make PY=/path/to/python3.11 demo)"; exit 1; }
@@ -35,6 +35,9 @@ webhooks: install   ## webhook-only server for PayPal events (point a tunnel at 
 
 audit-verify: install
 	$(BIN)/python -m cashdesk.audit verify
+
+backup: install   ## consistent, verified copy of var/ (database + audit log) in var/backups/<time>
+	$(BIN)/python -m cashdesk.backup create
 
 clean:
 	rm -rf $(VENV) var/*.db var/*.jsonl
