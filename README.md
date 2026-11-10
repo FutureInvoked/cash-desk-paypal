@@ -23,8 +23,9 @@ in a hash-chained audit log you can verify. One click exports a balanced journal
 Or watch the 2-minute video: <https://www.youtube.com/watch?v=5Sc75bXU300>.
 
 Nothing is sent to PayPal and the server holds no keys. Your changes are private to your browser and
-reset after 2 hours idle (or with **Reset demo**). The free instance sleeps when nobody uses it, so
-the first visit can take up to a minute.
+reset after 2 hours idle (or with **Reset demo**). It runs on Render's free plan; a scheduled GitHub
+Action (`.github/workflows/keep-warm.yml`) keeps it awake, but if it has slept, the first visit can
+take up to a minute.
 
 ## Run it yourself in one command (no keys needed)
 
