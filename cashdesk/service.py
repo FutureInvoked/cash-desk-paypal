@@ -10,6 +10,7 @@ import os
 import threading
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Callable
 
 from .actions import propose
@@ -36,8 +37,14 @@ def money_json(m: Money | None) -> dict | None:
 
 class Desk:
     def __init__(self, *, client: PayPalClient | None = None, reconciler=None,
-                 clock: Callable[[], datetime] | None = None, policy: Policy | None = None):
-        self.settings = load_settings()
+                 clock: Callable[[], datetime] | None = None, policy: Policy | None = None,
+                 var_dir: Path | str | None = None):
+        """`var_dir`: this desk's own data folder (the public demo gives each visitor one)."""
+        settings = load_settings()
+        if var_dir is not None:
+            from dataclasses import replace
+            settings = replace(settings, var_dir=Path(var_dir))
+        self.settings = settings
         self.client = client or make_client()
         self.reconciler = reconciler or make_reconciler()
         self.clock = clock or (lambda: datetime.now(timezone.utc))

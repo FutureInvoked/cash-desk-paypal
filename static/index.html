@@ -118,6 +118,9 @@
   .or { color: var(--muted); font-size: 12px; margin: 16px 0 0; border-top: 1px solid var(--border); padding-top: 12px; }
   #signin code { font: 12px var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
   .who { font-weight: 600; color: var(--text); }
+  .demo-banner { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 8px 20px; font-size: 13px;
+                 color: var(--info); background: var(--info-bg); border-bottom: 1px solid var(--border); }
+  .demo-banner button { padding: 3px 10px; font-size: 12px; }
   @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 900px) { .layout.open { grid-template-columns: minmax(0,1fr); } aside#detail { height: auto; } }
 </style>
@@ -141,6 +144,10 @@
     <button class="primary" id="sync">Re-sync PayPal</button>
   </div>
 </header>
+<div class="demo-banner" id="demo-banner" role="note" hidden>
+  <span id="demo-banner-text">Public demo with sample data. No PayPal calls. Your changes are private to this browser and reset after 2 hours.</span>
+  <button id="demo-reset" hidden>Reset demo</button>
+</div>
 <p class="state" id="booting">Loading…</p>
 <section id="signin" hidden aria-labelledby="signin-title">
   <h2 id="signin-title">Sign in</h2>
@@ -149,14 +156,14 @@
   <div id="demo-signin" hidden>
     <p>Two demo approvers, so you can try the two-person rule on a large refund:</p>
     <div class="demo-users" id="demo-users"></div>
-    <p class="or">Or sign in with an account:</p>
+    <p class="or" id="signin-or">Or sign in with an account:</p>
   </div>
   <form id="signin-form">
     <label class="field">Username<input id="signin-user" autocomplete="username" required maxlength="64"></label>
     <label class="field">Password<input id="signin-pass" type="password" autocomplete="current-password" required maxlength="256"></label>
     <div class="actions"><button class="primary" type="submit" id="signin-submit">Sign in</button></div>
   </form>
-  <p class="sub">No account yet? On the server, run <code>python -m cashdesk.users add &lt;username&gt; --name "Your Name"</code>
+  <p class="sub" id="signin-help">No account yet? On the server, run <code>python -m cashdesk.users add &lt;username&gt; --name "Your Name"</code>
     (it asks for a password).</p>
 </section>
 <div id="app" hidden>
@@ -256,7 +263,21 @@ const money = m => m ? `${Number(m.value).toLocaleString("en-US", {minimumFracti
 const pill = st => { const s = STATUS[st] || { label: st, tone: "neutral" }; return `<span class="pill tone-${s.tone}">${esc(s.label)}</span>`; };
 
 // ---------- who is signed in ----------
-let me = null;
+let me = null, publicDemo = false;
+
+// the hosted public demo: a banner on every page, Reset demo once signed in, demo approvers only
+function applyDemo(opts, signedIn) {
+  publicDemo = !!(opts && opts.public_demo);
+  document.getElementById("demo-banner").hidden = !publicDemo;
+  if (opts && opts.banner) document.getElementById("demo-banner-text").textContent = opts.banner;
+  document.getElementById("demo-reset").hidden = !(publicDemo && signedIn);
+  for (const id of ["signin-form", "signin-or", "signin-help"]) document.getElementById(id).hidden = publicDemo;
+}
+
+async function resetDemo() {
+  try { await fetch("/api/demo-reset", { method: "POST" }); } catch (e) { /* the sign-in screen still shows */ }
+  showSignin("Demo reset. Sign in again for a fresh copy of the sample data.");
+}
 // every data call: a 401 means the session ended (8 h idle, 24 h in all, or signed out elsewhere)
 async function apiFetch(url, opts) {
   const r = await fetch(url, opts);
@@ -291,6 +312,7 @@ async function showSignin(msg) {
     const [h, o] = await Promise.all([fetch("/api/health").then(r => r.json()), fetch("/api/login-options").then(r => r.json())]);
     document.getElementById("signin-mode").textContent = h.paypal_mode === "fixtures"
       ? "Sample data: nothing is sent to PayPal." : `PayPal ${h.paypal_mode}: approved actions call PayPal.`;
+    applyDemo(o, false);
     const demo = o.demo_users || [], box = document.getElementById("demo-users");
     document.getElementById("demo-signin").hidden = !demo.length;
     box.textContent = "";
@@ -344,9 +366,11 @@ async function startBoard() {
   // demo approvers: one click to the other one, to show the two-person rule
   const sw = document.getElementById("switch-user");
   sw.hidden = true;
-  if (me.demo) {
+  let o = null;
+  try { o = await (await fetch("/api/login-options")).json(); } catch (e) { /* no banner, no switch */ }
+  applyDemo(o, true);
+  if (me.demo && o) {
     try {
-      const o = await (await fetch("/api/login-options")).json();
       const other = (o.demo_users || []).find(u => u.username !== me.username);
       if (other) {
         sw.textContent = `Switch to ${other.display_name}`;
@@ -778,6 +802,7 @@ document.addEventListener("DOMContentLoaded", () => {
                            password: document.getElementById("signin-pass").value });
   });
   document.getElementById("signout").onclick = () => signOut();
+  document.getElementById("demo-reset").onclick = () => resetDemo();
 
   gridApi = agGrid.createGrid(document.getElementById("grid"), gridOptions);
   document.getElementById("search").addEventListener("input", e => { gridApi.setGridOption("quickFilterText", e.target.value); gridApi.onFilterChanged(); });

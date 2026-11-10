@@ -60,7 +60,8 @@ def extra_hosts() -> list[str]:
 def allowed_hosts() -> list[str]:
     import os
     test = ["testserver"] if os.environ.get("CASHDESK_TESTING") else []  # Starlette's TestClient only
-    return LOCAL_HOSTS + test + extra_hosts()
+    render = [h for h in [os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip()] if h]  # set by Render itself
+    return LOCAL_HOSTS + test + render + extra_hosts()
 
 
 def _host_matches(host: str, patterns: list[str]) -> bool:
@@ -70,7 +71,7 @@ def _host_matches(host: str, patterns: list[str]) -> bool:
 def create_app(desk=None) -> FastAPI:
     from urllib.parse import urlsplit
 
-    from starlette.middleware.trustedhost import TrustedHostMiddleware
+    from . import public_demo
 
     import logging
     from contextlib import asynccontextmanager
@@ -94,6 +95,13 @@ def create_app(desk=None) -> FastAPI:
                   lifespan=lifespan)
     hosts = allowed_hosts()
     commit = build_commit()
+    public = public_demo.enabled()
+    pool = None
+    if public:  # each visitor gets a private sample-data workspace (cashdesk/public_demo.py)
+        from .config import load_settings
+        pool = public_demo.WorkspacePool(load_settings().var_dir / "demo-workspaces")
+        app.state.demo_pool = pool
+        app.add_middleware(public_demo.DemoGate, pool=pool)
 
     @app.middleware("http")
     async def same_origin_writes(request: Request, call_next):
@@ -119,10 +127,18 @@ def create_app(desk=None) -> FastAPI:
         return response
 
     # a page on another hostname that resolves to 127.0.0.1 is refused before any route runs
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
+    # (GET /api/health excepted: a platform's health check calls it by IP)
+    app.add_middleware(public_demo.HostGuard, allowed_hosts=hosts)
+    if public_demo.behind_proxy():
+        app.add_middleware(public_demo.ProxyHeaders)
     state = {"desk": desk}
 
     def d():
+        if public:
+            ws = public_demo.current_desk.get()
+            if ws is None:
+                raise HTTPException(401, "sign in first")
+            return ws
         if state["desk"] is None:
             from .service import Desk
             state["desk"] = Desk()
@@ -186,12 +202,19 @@ def create_app(desk=None) -> FastAPI:
 
     @app.get("/api/login-options")
     def login_options() -> dict:
+        if public:  # no workspace is opened just to show the sign-in screen
+            from .users import DEMO_USERS
+            return {"demo_users": [{"username": u, "display_name": n} for u, n in DEMO_USERS],
+                    "public_demo": True, "banner": public_demo.BANNER}
         desk = d()
         demo = desk.users.demo_users() if desk.demo_allowed else []
-        return {"demo_users": [{"username": u.username, "display_name": u.display_name} for u in demo]}
+        return {"demo_users": [{"username": u.username, "display_name": u.display_name} for u in demo],
+                "public_demo": False}
 
     @app.post("/api/login")
     def login(body: Login, request: Request) -> JSONResponse:
+        if public:  # the public demo has only the one-click demo approvers
+            raise HTTPException(401, BAD_LOGIN)
         users, ip = d().users, request.client.host if request.client else None
         if users.login_blocked(body.username, ip):  # checked before the password: guessing gets nowhere
             raise HTTPException(429, "too many failed sign-ins; try again in 15 minutes")
@@ -212,14 +235,29 @@ def create_app(desk=None) -> FastAPI:
 
     @app.post("/api/logout")
     def logout(request: Request) -> JSONResponse:
-        d().users.end_session(request.cookies.get(SESSION_COOKIE))
+        try:
+            d().users.end_session(request.cookies.get(SESSION_COOKIE))
+        except HTTPException:
+            pass  # no workspace (public demo): nothing to end
         resp = JSONResponse({"signed_out": True})
         resp.delete_cookie(SESSION_COOKIE, path="/")
+        return resp
+
+    @app.post("/api/demo-reset")
+    def demo_reset(request: Request) -> JSONResponse:
+        if not public:
+            raise HTTPException(404, "not a public demo")
+        pool.drop(request.cookies.get(public_demo.DEMO_COOKIE))
+        resp = JSONResponse({"reset": True})
+        resp.delete_cookie(SESSION_COOKIE, path="/")
+        resp.delete_cookie(public_demo.DEMO_COOKIE, path="/")
         return resp
 
     @app.get("/api/me")
     def me(request: Request) -> dict:
         # the board asks on every load: signed out is an answer, not an error
+        if public and public_demo.current_desk.get() is None:
+            return {"user": None}
         user = d().user_for(request.cookies.get(SESSION_COOKIE))
         return {"user": user.to_dict() if user else None}
 

@@ -1,0 +1,29 @@
+# Render blueprint for the public demo: sample data only, no PayPal or AI credentials, each visitor
+# in a private workspace (cashdesk/public_demo.py). The server refuses to start if a credential is set.
+# Free instances sleep after ~15 minutes idle; the first request then takes about a minute.
+services:
+  - type: web
+    name: cash-desk-paypal
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: pip install -r requirements.lock
+    startCommand: python -m uvicorn cashdesk.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: CASHDESK_PUBLIC_DEMO
+        value: "1"
+      - key: CASHDESK_BEHIND_PROXY
+        value: "1"
+      - key: PAYPAL_MODE
+        value: fixtures
+      - key: AI_PROVIDER
+        value: none
+      - key: CASHDESK_NO_DOTENV
+        value: "1"
+      - key: CASHDESK_VAR_DIR
+        value: /tmp/cashdesk

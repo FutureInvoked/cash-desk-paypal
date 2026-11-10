@@ -90,6 +90,9 @@ def check_startup() -> tuple[list[str], list[str]]:
         s = load_settings()
     except ValueError as e:
         return [str(e)], []
+    from .public_demo import enabled as public_demo, guardrail_errors
+    if public_demo():
+        errors.extend(guardrail_errors(s.paypal_mode))
     try:
         sandbox_base_url()
     except ValueError as e:
@@ -116,6 +119,8 @@ def check_startup() -> tuple[list[str], list[str]]:
     except ValueError as e:
         if "AI_TIMEOUT" not in str(e):
             errors.append(str(e))
+    except Exception as e:  # noqa: BLE001 - e.g. a provider SDK refusing a missing key
+        warnings.append(f"the AI provider can't be set up ({type(e).__name__}: {e}); the deterministic fallback is used")
     for h in os.environ.get("CASHDESK_ALLOWED_HOSTS", "").split(","):
         h = h.strip()
         if h and not re.fullmatch(ALLOWED_HOST, h):
