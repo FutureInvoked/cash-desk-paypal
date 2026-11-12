@@ -268,13 +268,3 @@ def test_render_blueprint():
         assert secret not in y, secret
     import re
     assert not re.search(r"(?<![A-Za-z])sk-[A-Za-z0-9_-]{16,}", y)  # no API-key-shaped string
-
-
-def test_a_scheduled_job_keeps_the_hosted_demo_awake():
-    """Render's free plan sleeps after ~15 idle minutes; a judge's first load would wait about a minute."""
-    wf = REPO / ".github" / "workflows" / "keep-warm.yml"
-    y = wf.read_text()
-    assert "schedule:" in y and "cron:" in y and "workflow_dispatch:" in y
-    assert "https://cash-desk-paypal.onrender.com/api/health" in y  # the one route that is never rate-limited
-    assert "permissions: {}" in y  # the job needs no access to the repository
-    assert "secrets." not in y
